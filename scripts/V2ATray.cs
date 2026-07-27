@@ -15,7 +15,7 @@
 // Compiled by server.js (source runs) or scripts/build-release.mjs (releases)
 // with the .NET Framework compiler that ships with Windows.
 //
-// Usage: V2ATray.exe <port> <hotkeysJson|None> <iconPath>
+// Usage: V2ATray.exe <port> <hotkeysJson|None> <iconPath> <lang: en|zh>
 
 using System;
 using System.Collections.Generic;
@@ -34,6 +34,19 @@ using System.Windows.Forms;
 
 namespace V2A
 {
+    // ================================================================== strings
+    // The tray shows text on screen (menu, toasts, the recording bar) so it has
+    // to follow the same language as the HTML UI. server.js resolves the
+    // "system" setting and passes the answer in, so both halves always agree.
+    internal static class L
+    {
+        private static bool zh;
+
+        public static void Init(string lang) { zh = lang == "zh"; }
+
+        public static string T(string en, string cn) { return zh ? cn : en; }
+    }
+
     // ===================================================================== theme
     // Mirrors the dark-mode tokens in web/theme.css so the native surfaces and
     // the HTML UI look like one product.
@@ -173,7 +186,7 @@ namespace V2A
                                         (int)elapsed.TotalMinutes, elapsed.Seconds);
 
             using (var b = new SolidBrush(Theme.TextPrimary))
-                g.DrawString("录音中", Theme.TextBold, b, 30, Height / 2 - 9);
+                g.DrawString(L.T("Recording", "录音中"), Theme.TextBold, b, 30, Height / 2 - 9);
             using (var b = new SolidBrush(Theme.TextSecondary))
                 g.DrawString(time, Theme.Mono, b, 76, Height / 2 - 8);
 
@@ -414,13 +427,13 @@ namespace V2A
             {
                 if (!socket.ConnectAsync(new Uri(Endpoint), cts.Token).Wait(12000))
                 {
-                    Fail("连接 Soniox 超时");
+                    Fail(L.T("Timed out connecting to Soniox", "连接 Soniox 超时"));
                     return false;
                 }
             }
             catch (Exception e)
             {
-                Fail("连接 Soniox 失败：" + e.GetBaseException().Message);
+                Fail(L.T("Could not connect to Soniox: ", "连接 Soniox 失败：") + e.GetBaseException().Message);
                 return false;
             }
 
@@ -448,7 +461,7 @@ namespace V2A
             }
             catch (Exception e)
             {
-                Fail("发送 Soniox 配置失败：" + e.GetBaseException().Message);
+                Fail(L.T("Could not send the Soniox config: ", "发送 Soniox 配置失败：") + e.GetBaseException().Message);
                 return false;
             }
 
@@ -507,7 +520,7 @@ namespace V2A
             }
             catch
             {
-                if (!closedByUs) Fail("Soniox 连接中断");
+                if (!closedByUs) Fail(L.T("Soniox connection dropped", "Soniox 连接中断"));
             }
         }
 
@@ -563,10 +576,10 @@ namespace V2A
         {
             string s = (raw ?? "").ToLowerInvariant();
             if (s.Contains("unauthor") || s.Contains("invalid") || s.Contains("api key") || s.Contains("authentication"))
-                return "Soniox 的 API key 无效或已失效";
+                return L.T("The Soniox API key is invalid or expired", "Soniox 的 API key 无效或已失效");
             if (s.Contains("quota") || s.Contains("balance") || s.Contains("limit") || s.Contains("exceeded") || s.Contains("insufficient"))
-                return "Soniox 余额 / 额度不足";
-            return string.IsNullOrEmpty(raw) ? "Soniox 连接断开" : "Soniox 出错：" + raw;
+                return L.T("Soniox is out of balance / quota", "Soniox 余额 / 额度不足");
+            return string.IsNullOrEmpty(raw) ? L.T("Soniox disconnected", "Soniox 连接断开") : "Soniox 出错：" + raw;
         }
     }
 
@@ -753,6 +766,8 @@ namespace V2A
             int port = args.Length > 0 ? ParseInt(args[0], 8731) : 8731;
             string hotkeysJson = args.Length > 1 ? args[1] : "None";
             string iconPath = args.Length > 2 ? args[2] : null;
+            // server.js has already resolved the "system" setting for us.
+            L.Init(args.Length > 3 ? args[3] : "en");
 
             // .NET Framework does not always negotiate TLS 1.2 by default, and
             // Soniox requires it.
@@ -824,24 +839,25 @@ namespace V2A
             notify.Icon = LoadIcon(iconPath);
             notify.Visible = true;
             notify.Text = string.IsNullOrEmpty(recordKey)
-                ? "V2A - 语音转文字"
-                : "V2A - 语音转文字 (" + recordKey + " 录音)";
+                ? L.T("V2A - Voice to Agent", "V2A - 语音转文字")
+                : L.T("V2A - Voice to Agent (" + recordKey + " to record)",
+                       "V2A - 语音转文字 (" + recordKey + " 录音)");
 
             var menu = new ContextMenuStrip();
 
-            var show = new ToolStripMenuItem("显示窗口");
+            var show = new ToolStripMenuItem(L.T("Show window", "显示窗口"));
             show.Font = new Font(menu.Font, FontStyle.Bold);
             show.Click += delegate { api.Request("POST", "/api/tray/show", new Dictionary<string, object>()); };
             menu.Items.Add(show);
 
             var rec = new ToolStripMenuItem(string.IsNullOrEmpty(recordKey)
-                ? "开始 / 停止录音" : "开始 / 停止录音   (" + recordKey + ")");
+                ? L.T("Start / stop recording", "开始 / 停止录音") : "开始 / 停止录音   (" + recordKey + ")");
             rec.Click += delegate { ToggleRecording(); };
             menu.Items.Add(rec);
 
             menu.Items.Add(new ToolStripSeparator());
 
-            var quit = new ToolStripMenuItem("退出 V2A");
+            var quit = new ToolStripMenuItem(L.T("Quit V2A", "退出 V2A"));
             quit.Click += delegate
             {
                 StopRecording(true);
@@ -905,8 +921,11 @@ namespace V2A
             if (failed.Count > 0)
             {
                 notify.ShowBalloonTip(5000, "V2A",
-                    "这些快捷键被其他程序占用，没能注册：\n" + string.Join("、", failed.ToArray()) +
-                    "\n可以在设置里换一个组合。", ToolTipIcon.Warning);
+                    L.T("These hotkeys are already taken by another program and could not be registered:\n",
+                        "这些快捷键被其他程序占用，没能注册：\n")
+                    + string.Join(L.T(", ", "、"), failed.ToArray())
+                    + L.T("\nYou can pick different ones in Settings.", "\n可以在设置里换一个组合。"),
+                    ToolTipIcon.Warning);
             }
         }
 
@@ -928,12 +947,12 @@ namespace V2A
                 try
                 {
                     var config = api.Request("GET", "/api/session/config", null);
-                    if (config == null) { Toast("V2A 后台没有响应", Theme.Error); return; }
+                    if (config == null) { Toast(L.T("V2A background service is not responding", "V2A 后台没有响应"), Theme.Error); return; }
 
                     string key = ServerApi.Str(config, "sonioxKey");
-                    if (string.IsNullOrEmpty(key)) { Toast("还没有配置 Soniox API key", Theme.Error); return; }
+                    if (string.IsNullOrEmpty(key)) { Toast(L.T("No Soniox API key configured yet", "还没有配置 Soniox API key"), Theme.Error); return; }
 
-                    if (!MicCapture.HasDevice) { Toast("找不到麦克风", Theme.Error); return; }
+                    if (!MicCapture.HasDevice) { Toast(L.T("No microphone found", "找不到麦克风"), Theme.Error); return; }
 
                     soniox = new SonioxSession();
                     soniox.OnText = PushTranscript;
@@ -955,7 +974,7 @@ namespace V2A
 
                     if (!mic.Start())
                     {
-                        Toast("麦克风打不开，可能被其他程序占用", Theme.Error);
+                        Toast(L.T("Could not open the microphone - another app may be using it", "麦克风打不开，可能被其他程序占用"), Theme.Error);
                         soniox.Stop();
                         soniox = null;
                         return;
@@ -996,9 +1015,10 @@ namespace V2A
 
                     if (silent) return;
                     if (string.IsNullOrEmpty(text.Trim()))
-                        Toast("没听到声音", Theme.Error);
+                        Toast(L.T("Didn't catch any audio", "没听到声音"), Theme.Error);
                     else
-                        Toast("已停止 · " + text.Trim().Length + " 字", Theme.Success);
+                        Toast(L.T("Stopped - " + text.Trim().Length + " chars",
+                                  "已停止 · " + text.Trim().Length + " 字"), Theme.Success);
                 }
                 finally { busy = false; }
             });
@@ -1024,16 +1044,17 @@ namespace V2A
         {
             ThreadPool.QueueUserWorkItem(delegate
             {
-                Toast(kind == "deep" ? "深度整理中…" : "轻度整理中…", Theme.Accent);
+                Toast(kind == "deep" ? L.T("Deep cleanup...", "深度整理中…")
+                                     : L.T("Quick cleanup...", "轻度整理中…"), Theme.Accent);
 
                 var res = api.Request("POST", "/api/session/cleanup",
                     new Dictionary<string, object> { { "kind", kind } });
 
-                if (res == null) { Toast("V2A 后台没有响应", Theme.Error); return; }
+                if (res == null) { Toast(L.T("V2A background service is not responding", "V2A 后台没有响应"), Theme.Error); return; }
 
                 if (!ServerApi.Bool(res, "ok"))
                 {
-                    Toast(ServerApi.Str(res, "message") ?? "整理失败", Theme.Error);
+                    Toast(ServerApi.Str(res, "message") ?? L.T("Cleanup failed", "整理失败"), Theme.Error);
                     return;
                 }
 
@@ -1041,11 +1062,12 @@ namespace V2A
                 if (ServerApi.Bool(res, "copied"))
                 {
                     SetClipboard(text);
-                    Toast("整理完成 · 已复制 " + text.Length + " 字", Theme.Success);
+                    Toast(L.T("Done - " + text.Length + " chars copied",
+                              "整理完成 · 已复制 " + text.Length + " 字"), Theme.Success);
                 }
                 else
                 {
-                    Toast("整理完成 · " + text.Length + " 字", Theme.Success);
+                    Toast(L.T("Done - " + text.Length + " chars", "整理完成 · " + text.Length + " 字"), Theme.Success);
                 }
             });
         }
@@ -1055,11 +1077,11 @@ namespace V2A
             ThreadPool.QueueUserWorkItem(delegate
             {
                 var res = api.Request("GET", "/api/session/processed", null);
-                if (res == null) { Toast("V2A 后台没有响应", Theme.Error); return; }
+                if (res == null) { Toast(L.T("V2A background service is not responding", "V2A 后台没有响应"), Theme.Error); return; }
                 string text = ServerApi.Str(res, "text") ?? "";
-                if (text.Length == 0) { Toast("还没有整理结果", Theme.Error); return; }
+                if (text.Length == 0) { Toast(L.T("No cleaned-up text yet", "还没有整理结果"), Theme.Error); return; }
                 SetClipboard(text);
-                Toast("已复制 " + text.Length + " 字", Theme.Success);
+                Toast(L.T("Copied " + text.Length + " chars", "已复制 " + text.Length + " 字"), Theme.Success);
             });
         }
 
@@ -1067,10 +1089,10 @@ namespace V2A
         {
             ThreadPool.QueueUserWorkItem(delegate
             {
-                if (recording) { Toast("正在录音，先停止再清空", Theme.Error); return; }
+                if (recording) { Toast(L.T("Still recording - stop before clearing", "正在录音，先停止再清空"), Theme.Error); return; }
                 var res = api.Request("POST", "/api/session/clear", new Dictionary<string, object>());
-                if (res == null) { Toast("V2A 后台没有响应", Theme.Error); return; }
-                Toast(ServerApi.Bool(res, "cleared") ? "已清空" : "没有内容可清空",
+                if (res == null) { Toast(L.T("V2A background service is not responding", "V2A 后台没有响应"), Theme.Error); return; }
+                Toast(ServerApi.Bool(res, "cleared") ? L.T("Cleared", "已清空") : L.T("Nothing to clear", "没有内容可清空"),
                       ServerApi.Bool(res, "cleared") ? Theme.Success : Theme.Accent);
             });
         }

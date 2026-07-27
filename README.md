@@ -1,235 +1,249 @@
 <div align="center">
 
+**English** · [中文](README.zh-CN.md)
+
 # V2A for Windows
 
-**说一段话 → 实时转成文字 → AI 整理通顺 → 复制给 ChatGPT / Claude / 任何 Agent**
+**Speak → live transcript → AI cleans it up → paste into ChatGPT, Claude, or any agent**
 
-打字慢的时候用。自带 key，没有后端，不收集任何数据。
+For when typing is the bottleneck. Bring your own keys — no backend, no account, no telemetry.
 
-<sub>*Speak, get clean agent-ready text. Real-time transcription via Soniox plus the AI provider of your
-choice for cleanup. Bring your own keys — no backend, no account, no telemetry.
-The app itself is bilingual (中文 / English).*</sub>
+[![Download](https://img.shields.io/github/v/release/CharlesGuooo/V2A-Windows?label=download&style=for-the-badge)](https://github.com/CharlesGuooo/V2A-Windows/releases/latest)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 
-<img src="docs/screenshot-dark.png" width="420" alt="V2A 主界面">
+<img src="docs/screenshot-dark.png" width="420" alt="V2A main window">
 
 </div>
 
 ---
 
-## 它解决什么问题
+## Why
 
-跟 AI agent 打交道时，想说的话往往比能打出来的多。但直接把语音转录粘过去又很难用 ——
-口语里全是「嗯」「那个」「不对等一下」，还有说到一半改口。
+Talking to an AI agent, you can usually say more than you can type. But pasting a raw
+transcript is miserable — it's full of "um", "you know", and mid-sentence corrections.
 
-V2A 把这一段补上：**转录之后再让 AI 按你定的规则整理一遍**。上面截图里就是个真实例子 ——
-说话人中途改了主意（「先改登录，不对，应该先做数据迁移」），深度整理直接按最终意思
-输出成了有序的 bullet。
+V2A closes that gap: **after transcription, an AI rewrites it by rules you control.**
+The screenshot above is a real example — the speaker changed their mind halfway
+("change the login flow first — no wait, do the data migration first"), and Deep cleanup
+silently resolved it into the correct order.
 
 ---
 
-## 安装
+## Install
 
-### 方式一：安装包（推荐）
+### Option 1 — Installer (recommended)
 
-到 [**Releases**](https://github.com/CharlesGuooo/V2A-Windows/releases/latest) 下载
-`V2A-Setup-1.0.0.exe`（约 23 MB），双击走向导即可。**不需要管理员权限，不会弹 UAC**
-—— 装在 `%LOCALAPPDATA%\Programs\V2A`。安装包里已经带了 Node 运行时，**不用另外装任何东西**。
+Grab `V2A-Setup-x.y.z.exe` (~23 MB) from
+[**Releases**](https://github.com/CharlesGuooo/V2A-Windows/releases/latest) and double-click it.
+**No admin rights, no UAC prompt** — it installs to `%LOCALAPPDATA%\Programs\V2A`.
+The Node runtime is bundled, so **there is nothing else to install**.
 
-卸载走「添加或删除程序」，会问你要不要一并删掉 API key 和历史记录（默认保留）。
+Uninstall from Add or remove programs. It asks whether to also delete your API keys and
+history (it keeps them by default).
 
-### 方式二：便携版
+### Option 2 — Portable
 
-下载 `V2A-1.0.0-portable.zip`（约 32 MB），解压到任意位置，双击里面的 `V2A.vbs`。
-不写注册表、不建卸载项，删掉文件夹就等于卸载。
+Grab `V2A-x.y.z-portable.zip` (~32 MB), unzip anywhere, run `V2A.vbs` inside.
+No registry writes, no uninstall entry — deleting the folder *is* uninstalling.
 
-### 方式三：从源码运行
+### Option 3 — From source
 
-需要先装 [Node.js](https://nodejs.org) 18+（LTS 版即可）。
+Needs [Node.js](https://nodejs.org) 18+ (LTS is fine).
 
 ```bash
 git clone https://github.com/CharlesGuooo/V2A-Windows
 cd V2A-Windows
 ```
 
-然后双击 `V2A.vbs`。首次运行会用 Windows 自带的 C# 编译器编译一个托盘程序
-（源码就是 `scripts/V2ATray.cs`，可以先自己看）。
+Then double-click `V2A.vbs`. On first run it compiles a small tray helper using the C#
+compiler already on every Windows machine — the source is `scripts/V2ATray.cs`, so read it
+first if you like.
 
-> 出问题时改用 `V2A-调试模式.bat` 启动，会保留控制台并实时打印日志。
-> 无论用哪种方式启动，日志都会写入 `%APPDATA%\V2A\v2a.log`。
+> Something wrong? Launch with `V2A-调试模式.bat` to keep a console open with live logs.
+> Either way, logs land in `%APPDATA%\V2A\v2a.log`.
 
 ---
 
-## ⚠️ Windows 和杀毒软件会拦一下
+## ⚠️ Windows and your antivirus will complain
 
-**这不是 bug，是未签名程序的正常待遇。** 代码签名证书要 200-400 美元一年还得配硬件
-token，一个免费开源小工具暂时不打算买。
+**Not a bug — this is what unsigned software gets.** A code-signing certificate runs
+$200–400/year and now requires a hardware token, which is hard to justify for a free tool.
 
-**SmartScreen**：下载后双击会弹蓝色的「Windows 已保护你的电脑」。
-点「**更多信息**」→「**仍要运行**」即可。下载量积累起来后这个提示会自动消失。
+**SmartScreen**: a blue "Windows protected your PC" screen. Click **More info** →
+**Run anyway**. It stops appearing once a release has enough downloads.
 
-**杀毒软件**：托盘程序会注册全局快捷键、访问麦克风并联网 —— 这几件事凑在一起，
-在行为检测眼里和监听类软件很像，有些杀软（实测 McAfee）会直接拦截甚至删除它。
-如果遇到，把 `%APPDATA%\V2A` 和安装目录加进杀软的排除项。
+**Antivirus**: the tray helper registers global hotkeys, opens the microphone, and talks to
+the network. That combination looks a lot like spyware to behavioural detection, and some
+products (McAfee, in testing) will block or delete it. If that happens, add `%APPDATA%\V2A`
+and the install directory to your antivirus exclusions.
 
-**不放心？该有的都给你**：
+**Don't want to take my word for it:**
 
-- 每个 Release 都附 `SHA256SUMS.txt`，可以校验下载的文件没被掉包：
+- Every release ships `SHA256SUMS.txt` so you can verify what you downloaded:
   ```powershell
   Get-FileHash .\V2A-Setup-1.0.0.exe -Algorithm SHA256
   ```
-- 托盘程序的**完整源码随包分发**（安装目录里的 `scripts\V2ATray.cs`），
-  你可以自己读、自己用 `csc.exe` 重新编译一份
-- 整个项目零第三方依赖，没有 `node_modules`，没有任何你没法审计的代码
+- **The tray helper's full source ships inside the package** (`scripts\V2ATray.cs`).
+  Read it, and rebuild it yourself with `csc.exe` if you want.
+- Zero third-party dependencies. No `node_modules`, nothing you can't audit.
 
 ---
 
-## 开始用：填两个 key
+## Setup: two API keys
 
-首次打开会走 5 步引导，需要两个 key，都能免费拿到：
+First launch walks you through five steps. Both keys are free to obtain:
 
-| Key | 干什么的 | 去哪拿 |
+| Key | What it does | Where |
 |---|---|---|
-| **Soniox** | 把语音实时转成文字 | [console.soniox.com](https://console.soniox.com/) |
-| **AI provider**（五选一） | 把转录整理通顺 | 见下表 |
+| **Soniox** | Real-time speech → text | [console.soniox.com](https://console.soniox.com/) |
+| **An AI provider** (pick one) | Cleans up the transcript | see below |
 
-| Provider | 说明 |
+| Provider | Notes |
 |---|---|
-| **Deepseek**（默认） | 注册送免费额度，中文友好，推荐先用这家 |
-| **Groq** | 免费额度大、速度飞快 |
-| **Gemini** | 每天有免费配额，量不大不用付钱 |
-| **Claude** | 质量最稳，但要先充值 |
-| **OpenAI** | 知名度最高，也要先充值 |
+| **Deepseek** (default) | Free credit on signup, strong with Chinese — good first choice |
+| **Groq** | Generous free tier, very fast |
+| **Gemini** | Daily free quota; casual use usually costs nothing |
+| **Claude** | Most consistent quality, but needs prepaid credit |
+| **OpenAI** | Best known, also needs prepaid credit |
 
-key 存在哪：**用 Windows 数据保护（DPAPI）加密后存在本机**，只有你这个 Windows
-账户能解开。应用内随时可以换 provider，每家的 key 独立保存。
+Keys are encrypted at rest with **Windows Data Protection (DPAPI)** — only your Windows
+account can decrypt them. Switch providers any time; each key is stored separately.
 
 ---
 
-## 快捷键
+## Hotkeys
 
-**全局生效** —— 在任何窗口下按都行，不用先切回 V2A。都可以在「设置 → 全局快捷键」里改。
+**Global** — they work from any window, and **they keep working after you close the V2A
+window** (it stays in the notification area). All rebindable in Settings.
 
-| 组合键 | 作用 |
+| Shortcut | Action |
 |---|---|
-| `Ctrl+Shift+R` | 开始 / 停止录音 |
-| `Ctrl+Shift+Q` | 轻度整理 |
-| `Ctrl+Shift+D` | 深度整理 |
-| `Ctrl+Shift+X` | 复制整理结果 |
-| `Ctrl+Shift+Backspace` | 清空全部 |
+| `Ctrl+Shift+R` | Start / stop recording |
+| `Ctrl+Shift+Q` | Quick cleanup |
+| `Ctrl+Shift+D` | Deep cleanup |
+| `Ctrl+Shift+X` | Copy the cleaned text |
+| `Ctrl+Shift+Backspace` | Clear everything |
 
-**关掉窗口后这些照样能用** —— 录音、Soniox 连接和整理都不在窗口里跑，窗口只是个视图。
-按下录音键，屏幕右下角会出现一个悬浮条（红点 + 计时 + 音量条），不会抢走你正在打字的
-那个窗口的光标。整理完成、已复制、没有内容可整理这些也都用同样的浮层提示。
+While recording, a small bar appears in the bottom-right (record dot, elapsed time, level
+meter). **It never takes focus**, so the caret stays wherever you were typing. Cleanup
+finished, copied, nothing to clean up — all reported the same unobtrusive way.
 
-> 全局快捷键会从其它程序手里接管这个组合，所以如果你有常用的冲突组合，去设置里换一个。
-> 注册失败时托盘会弹气泡告诉你是哪个被占用了。
+> A global hotkey takes that combination away from every other application, so if one
+> clashes with something you use, rebind it in Settings. If another program already owns a
+> combination, the tray tells you which one failed to register.
 
-**关掉窗口不等于退出** —— V2A 会留在右下角系统托盘里。双击图标重新打开窗口，
-右键可以彻底退出。设置里还能打开「开机自动启动」（后台常驻约 90MB）。
+**Closing the window is not quitting.** Double-click the tray icon to bring it back,
+right-click to quit for good. Settings also has "Start with Windows" (~90 MB resident).
 
 ---
 
-## 两种整理风格
+## Two cleanup styles
 
-| | 做什么 | 什么时候用 |
+| | What it does | When |
 |---|---|---|
-| **轻度整理** | 删语气词、修标点、小幅理顺，尽量不动你的原话 | 说得比较清楚，只想去掉口水词 |
-| **深度整理** | 识别改口只留最终意思、把分点整理成 bullet、合并前后补充 | 说得比较乱、边想边说 |
+| **Quick** | Strips fillers, fixes punctuation, light polish — your wording mostly survives | You spoke clearly and just want the "um"s gone |
+| **Deep** | Resolves self-corrections to final intent, turns spoken lists into bullets, merges later additions back into the right point | You rambled or thought out loud |
 
-还可以写**两个自定义 prompt**（设置 → 整理风格），在主界面**右键**整理按钮就能选用。
-自定义 prompt 甚至可以直接用说的录进去。
+You can also write **two custom prompts** (Settings → Cleanup Style) and reach them by
+**right-clicking** a cleanup button. You can even dictate the custom prompt itself.
 
-内置 prompt 的完整原文都在应用里能看到，也在 [`web/prompts.js`](web/prompts.js) 里。
-
----
-
-## 隐私
-
-没有后端、没有账号、没有统计、没有广告。
-
-- API key 用 DPAPI 加密存在本机，我们看不到，也不会上传
-- 录音用**你自己的** Soniox key 直接发给 Soniox；整理用**你自己的** provider key
-  直接发给对应厂商。**中间不经过任何我们的服务器**
-- 热词、自定义风格、转录历史（最多 20 条）都只存在本机 `%APPDATA%\V2A`
-- 卸载时会问你要不要一并删除这些数据，默认保留
+The built-in prompts are visible in the app, and live in [`web/prompts.js`](web/prompts.js).
 
 ---
 
-## 常见问题
+## Privacy
 
-**双击没反应 / 提示找不到 Node.js**
-装安装包版就不会有这个问题（自带 Node）。从源码跑的话装一下
-[Node.js LTS](https://nodejs.org)，装完重启电脑让 PATH 生效。
+No backend, no account, no analytics, no ads.
 
-**快捷键按了没用**
-八成被别的程序占用了（输入法、录屏、截图工具都爱抢）。托盘图标会弹气泡提示注册失败。
-去「设置 → 全局快捷键」换一个组合。
-
-**点了录音但没声音**
-第一次会弹麦克风授权，点「允许」。误点了拒绝的话，点窗口里地址栏位置左边的图标重新允许，
-或去 Windows 设置 → 隐私和安全性 → 麦克风 检查。
-
-**找不到托盘图标**
-Windows 默认会把不常用的托盘图标折叠起来 —— 点右下角那个向上的小箭头。
-可以拖出来固定在任务栏上。
-
-**报「余额不足」/「key 无效」**
-应用里的错误提示会直接给出对应厂商的充值或重新配置入口，点一下就能跳过去。
-
-**想彻底清干净**
-删掉 `%APPDATA%\V2A` 整个文件夹即可（里面是 key、设置、历史和日志）。
+- API keys are DPAPI-encrypted on your machine. We never see them and never upload them.
+- Audio goes to Soniox with **your** Soniox key; cleanup goes to your provider with **your**
+  provider key. **Nothing routes through any server of ours.**
+- Hotwords, custom styles and transcript history (last 20) stay in `%APPDATA%\V2A`.
+- Uninstalling asks before deleting any of it.
 
 ---
 
-## 开发
+## Troubleshooting
 
-零第三方依赖，改完直接跑，没有构建步骤。
+**Nothing happens on double-click / it says Node.js is missing**
+The installer bundles Node, so this only affects running from source — install
+[Node.js LTS](https://nodejs.org) and reboot so `PATH` updates.
+
+**A hotkey does nothing**
+Something else probably owns it (IMEs, screen recorders and screenshot tools are common
+culprits). The tray shows a balloon naming any combination that failed to register.
+Rebind it in Settings → Global hotkeys.
+
+**Recording starts but nothing is transcribed**
+Check the level meter on the floating bar. If it never moves, Windows is sending silence —
+check Settings → Privacy & security → Microphone, and that the right input device is
+selected in the Windows sound settings.
+
+**I can't find the tray icon**
+Windows hides infrequently-used tray icons behind the small arrow in the corner. Drag V2A
+out of that overflow to pin it to the taskbar.
+
+**"Out of balance" or "invalid key"**
+The in-app error links straight to that provider's top-up or key page.
+
+**Remove every trace**
+Delete `%APPDATA%\V2A` (keys, settings, history, logs).
+
+---
+
+## Development
+
+Zero third-party dependencies, no build step — edit and run.
 
 ```
-V2A.vbs                双击入口（UTF-16LE，别用普通编辑器改存成 UTF-8）
-server.js              后端：静态服务 / 设置 / DPAPI / AI 流式代理 / SSE / 生命周期
-scripts/V2ATray.cs     托盘 + 全局快捷键，首次运行本机编译
-scripts/build-release.mjs  打包脚本
-installer/V2A.iss      Inno Setup 安装向导配置
+V2A.vbs                    launcher (UTF-16LE — don't let an editor save it as UTF-8)
+server.js                  static server, settings, DPAPI, AI proxy, session state, SSE
+scripts/V2ATray.cs         tray, hotkeys, mic capture, Soniox, overlays
+scripts/build-release.mjs  release packaging
+installer/V2A.iss          Inno Setup wizard
 web/
-  theme.css            设计 token（颜色逐个抄自 iOS 版的 Assets.xcassets）
-  state.js             AppState.swift 的移植
-  main-screen.js       ContentView.swift + TranscriptPaneView.swift
-  settings.js          设置 / prompt 管理 / 历史 / FAQ / 关于 / 语言
-  onboarding.js        OnboardingFlow.swift
-  soniox.js            SonioxClient.swift（WebSocket 实时转写）
-  recorder.js          MicRecorder.swift（AudioWorklet → 16kHz Int16 PCM）
-  errors.js            AppError.swift 的 FailureClassifier
-  prompts.js           PromptDefaults.swift（prompt 原文一字未改）
-  i18n.js              Localizable.xcstrings
+  theme.css                design tokens (colours copied from the iOS asset catalog)
+  state.js                 port of AppState.swift, now a view model over the server
+  main-screen.js           ContentView.swift + TranscriptPaneView.swift
+  settings.js              settings, prompt manager, history, FAQ, about, languages
+  onboarding.js            OnboardingFlow.swift
+  soniox.js                SonioxClient.swift (browser fallback path)
+  recorder.js              MicRecorder.swift (browser fallback path)
+  errors.js                FailureClassifier from AppError.swift
+  prompts.js               PromptDefaults.swift, prompt text verbatim
+  i18n.js                  Localizable.xcstrings
 ```
 
-打包（需要先 `winget install JRSoftware.InnoSetup`）：
+Build a release (needs `winget install JRSoftware.InnoSetup` once):
 
 ```bash
 node scripts/build-release.mjs
 ```
 
-产物在 `dist/`：安装包、便携 zip、SHA256 清单。
+Artefacts land in `dist/`: installer, portable zip, SHA256 list.
 
-### 几个设计选择
+### Design notes
 
-- **页面跑在 `http://127.0.0.1`** —— 浏览器认可的安全上下文，所以 `getUserMedia`
-  和 `AudioWorklet` 能直接用，麦克风链路和 iOS 版是同一套 16kHz Int16 PCM 分帧。
-- **Soniox 走 WebSocket 直连** —— WebSocket 不受 CORS 限制，音频不经任何中转。
-- **AI 请求走本地后端代理** —— 绕开浏览器 CORS，同时 provider 的 key 不进页面，
-  流式 token 用 SSE 回传。
-- **托盘用编译好的小程序而不是 PowerShell 脚本** —— 一个注册全局热键又访问网络的
-  `.ps1`，在杀软的脚本扫描器眼里和键盘记录器长得一模一样，实测会被直接隔离删除。
+- **Capture and session state are native, not in the page.** The window is a view; closing
+  it doesn't stop a recording. Keeping the browser alive just to hold the recorder would
+  have cost ~600 MB resident instead of ~90 MB.
+- **The page is served from `http://127.0.0.1`**, a secure context, so the browser fallback
+  path can still use `getUserMedia` and `AudioWorklet` when needed.
+- **Soniox is a direct WebSocket** — no CORS, and audio never passes through a middleman.
+- **AI requests are proxied by the local server** so provider keys never enter the page and
+  streaming tokens come back over SSE.
+- **The tray is a compiled binary rather than a PowerShell script.** A `.ps1` that registers
+  global hotkeys and talks to the network is indistinguishable from a keylogger to a script
+  scanner — in testing it got quarantined outright.
 
 ---
 
-## 致谢
+## Credits
 
-这是 [**CharlesGuooo/V2A**](https://github.com/CharlesGuooo/V2A) 的 Windows 移植版 ——
-原版是一个纯 SwiftUI 的 iOS 应用。界面设计、配色、prompt 原文和文案都来自那边，
-逐项对照移植。想在 iPhone 上用请去原仓库。
+A Windows port of [**CharlesGuooo/V2A**](https://github.com/CharlesGuooo/V2A), a pure
+SwiftUI iOS app. The interface design, colour tokens, prompt text and copy all come from
+there, ported item by item. If you want this on an iPhone, go to that repo.
 
 ## License
 
-MIT —— 见 [LICENSE](LICENSE)。
+MIT — see [LICENSE](LICENSE).

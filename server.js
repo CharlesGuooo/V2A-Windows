@@ -128,7 +128,9 @@ const DEFAULT_SETTINGS = {
   promptSlot2: '',
   hotwords: [],
   onboarded: false,
-  uiLanguage: 'zh',       // system | zh | en
+  // Follow the OS: English everywhere except on a Chinese-locale machine,
+  // which is the right default for an app shipped worldwide.
+  uiLanguage: 'system',   // system | zh | en
   appearance: 'system',   // system | light | dark
   // On by default: the cleaned text is what you actually want in your agent,
   // so putting it straight on the clipboard removes the last manual step.
@@ -580,6 +582,17 @@ const TRAY_EXE_BUILT = path.join(DATA_DIR, 'V2ATray.exe');
 
 let trayProc = null;
 
+// Resolves the "system" language setting the same way the page does, so the
+// tray's menu and toasts always match the window.
+function resolveUiLang() {
+  if (settings.uiLanguage === 'zh' || settings.uiLanguage === 'en') return settings.uiLanguage;
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().locale.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+  } catch {
+    return 'en';
+  }
+}
+
 function findCsc() {
   const root = process.env.SystemRoot || 'C:\\Windows';
   return [
@@ -632,11 +645,12 @@ function startTray() {
   // The tray registers every hotkey it is given, so hand it the whole map.
   const hotkeyArg = settings.hotkeysEnabled ? JSON.stringify(settings.hotkeys) : 'None';
   try {
-    trayProc = spawn(exe, [String(PORT), hotkeyArg, path.join(WEB_DIR, 'icon.ico')], {
+    trayProc = spawn(exe, [String(PORT), hotkeyArg, path.join(WEB_DIR, 'icon.ico'), resolveUiLang()], {
       detached: false, stdio: 'ignore', windowsHide: true,
     });
     trayProc.on('exit', (code) => log('tray exited', code));
-    log('tray started:', path.basename(path.dirname(exe)) + '\\' + path.basename(exe), '| hotkeys =', hotkeyArg);
+    log('tray started:', path.basename(path.dirname(exe)) + '\\' + path.basename(exe),
+        '| lang =', resolveUiLang(), '| hotkeys =', hotkeyArg);
   } catch (e) {
     log('tray start failed:', e.message);
   }
@@ -1021,11 +1035,12 @@ async function handleApi(req, res, url) {
   // ---- settings
   if (route === '/api/settings' && req.method === 'POST') {
     const patch = await readBody(req);
-    const before = JSON.stringify([settings.hotkeys, settings.hotkeysEnabled]);
+    // The tray reads its hotkeys and its language once, at launch.
+    const before = JSON.stringify([settings.hotkeys, settings.hotkeysEnabled, settings.uiLanguage]);
     const autostartChanged =
       patch.autostart !== undefined && patch.autostart !== settings.autostart;
     saveSettings(patch);
-    if (JSON.stringify([settings.hotkeys, settings.hotkeysEnabled]) !== before) startTray();
+    if (JSON.stringify([settings.hotkeys, settings.hotkeysEnabled, settings.uiLanguage]) !== before) startTray();
     if (autostartChanged) await applyAutostart(settings.autostart);
     return sendJson(res, 200, { ok: true, settings });
   }

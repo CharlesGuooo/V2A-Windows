@@ -234,6 +234,7 @@ const EN = {
   '麦克风被其他程序占用，关掉它再试。': 'The microphone is in use by another app. Close it and retry.',
   '删除': 'Delete',
   '数据位置': 'Data folder',
+  'V2A 后台没有响应': 'V2A background service is not responding',
   '源码 / 反馈 →': 'Source / feedback →',
   '有新版本 %@': 'Version %@ available',
   '去下载': 'Download',
