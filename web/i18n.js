@@ -234,6 +234,9 @@ const EN = {
   '麦克风被其他程序占用，关掉它再试。': 'The microphone is in use by another app. Close it and retry.',
   '删除': 'Delete',
   '数据位置': 'Data folder',
+  '源码 / 反馈 →': 'Source / feedback →',
+  '有新版本 %@': 'Version %@ available',
+  '去下载': 'Download',
   '录音快捷键': 'Recording hotkey',
   '全局快捷键（任何窗口下都能用）': 'Global hotkey — works from any window',
   '按下快捷键就开始/停止录音，不用先切回 V2A。留空或关掉就不注册。':

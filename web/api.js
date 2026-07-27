@@ -25,6 +25,9 @@ export const api = {
   // chromeless app window (which has no address bar or tabs).
   openExternal: (url) => json('/api/open', { method: 'POST', body: JSON.stringify({ url }) }),
 
+  // Never rejects — a failed update check must not surface as an error.
+  checkUpdate: () => json('/api/update-check').catch(() => ({ hasUpdate: false })),
+
   quit: () => json('/api/tray/quit', { method: 'POST', body: '{}' }),
 
   // Streams an AI cleanup through the backend proxy (no CORS, key stays

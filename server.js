@@ -34,6 +34,18 @@ const WINDOW_W = 500;
 const WINDOW_H = 780;
 const HISTORY_CAP = 20; // HistoryStore.cap
 
+const GITHUB_REPO = 'CharlesGuooo/V2A-Windows';
+
+// package.json is the single source of truth for the version — the About
+// screen, the update check and the release artefact names all read it.
+const APP_VERSION = (() => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version || '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+})();
+
 // ---------------------------------------------------------------- logging
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -285,6 +297,59 @@ function appendHistory(session) {
   writeJsonAtomic(HISTORY_FILE, list.slice(0, HISTORY_CAP));
 }
 
+// ---------------------------------------------------------------- updates
+//
+// Deliberately minimal: ask GitHub once every few hours whether a newer
+// release exists and let the settings screen show a link. Nothing is
+// downloaded, nothing is forced, and any failure is silent — an update check
+// must never be a reason the app misbehaves.
+
+const UPDATE_TTL_MS = 6 * 60 * 60 * 1000;
+let updateCache = { at: 0, data: null };
+
+// Numeric-segment semver compare. Returns >0 when a is newer than b.
+function compareVersions(a, b) {
+  const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
+async function checkForUpdate() {
+  const now = Date.now();
+  if (updateCache.data && now - updateCache.at < UPDATE_TTL_MS) return updateCache.data;
+
+  const fallback = { current: APP_VERSION, latest: null, hasUpdate: false, url: null };
+  try {
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+      headers: { 'User-Agent': `V2A/${APP_VERSION}`, Accept: 'application/vnd.github+json' },
+      signal: AbortSignal.timeout(8000),
+    });
+    // 404 just means no release has been published yet.
+    if (!res.ok) {
+      updateCache = { at: now, data: fallback };
+      return fallback;
+    }
+    const json = await res.json();
+    const latest = String(json.tag_name || '').replace(/^v/i, '');
+    const data = {
+      current: APP_VERSION,
+      latest: latest || null,
+      hasUpdate: !!latest && compareVersions(latest, APP_VERSION) > 0,
+      url: json.html_url || `https://github.com/${GITHUB_REPO}/releases/latest`,
+    };
+    updateCache = { at: now, data };
+    return data;
+  } catch (e) {
+    log('update check failed:', e.message);
+    updateCache = { at: now, data: fallback };
+    return fallback;
+  }
+}
+
 // ---------------------------------------------------------------- SSE bus
 // One SSE stream per open app window. Also our "is a window open?" signal.
 
@@ -445,8 +510,13 @@ async function applyAutostart(enabled) {
 // and talks to localhost looks exactly like a keylogger to a script scanner,
 // and some AV products quarantine the .ps1 outright).
 
+// Released builds ship a prebuilt V2ATray.exe next to server.js; running from
+// source has no such file and compiles one into the data directory instead.
+// Preferring the shipped binary matters: a freshly compiled, low-reputation exe
+// is exactly what antivirus heuristics quarantine.
 const TRAY_SRC = path.join(ROOT, 'scripts', 'V2ATray.cs');
-const TRAY_EXE = path.join(DATA_DIR, 'V2ATray.exe');
+const TRAY_EXE_SHIPPED = path.join(ROOT, 'V2ATray.exe');
+const TRAY_EXE_BUILT = path.join(DATA_DIR, 'V2ATray.exe');
 
 let trayProc = null;
 
@@ -458,49 +528,54 @@ function findCsc() {
   ].find((p) => fs.existsSync(p)) || null;
 }
 
-// Rebuild only when missing or out of date.
-function buildTray() {
-  if (!fs.existsSync(TRAY_SRC)) return false;
+// Returns the tray executable to launch, or null if there isn't one.
+// A released build always takes the first branch and never invokes a compiler.
+function resolveTray() {
+  if (fs.existsSync(TRAY_EXE_SHIPPED)) return TRAY_EXE_SHIPPED;
+  if (!fs.existsSync(TRAY_SRC)) return null;
+
+  // Source checkout: build once, then reuse until the source changes.
   try {
-    if (fs.existsSync(TRAY_EXE) &&
-        fs.statSync(TRAY_EXE).mtimeMs >= fs.statSync(TRAY_SRC).mtimeMs) {
-      return true;
+    if (fs.existsSync(TRAY_EXE_BUILT) &&
+        fs.statSync(TRAY_EXE_BUILT).mtimeMs >= fs.statSync(TRAY_SRC).mtimeMs) {
+      return TRAY_EXE_BUILT;
     }
   } catch { /* fall through and rebuild */ }
 
   const csc = findCsc();
-  if (!csc) { log('no csc.exe found — tray unavailable'); return false; }
+  if (!csc) { log('no csc.exe found — tray unavailable'); return null; }
 
   const args = [
     '/nologo', '/target:winexe', '/optimize+', '/platform:anycpu',
     // Without this csc reads the source in the system ANSI codepage and the
     // Chinese menu labels come out as mojibake.
     '/codepage:65001',
-    `/out:${TRAY_EXE}`,
+    `/out:${TRAY_EXE_BUILT}`,
     '/reference:System.dll', '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll',
     TRAY_SRC,
   ];
   const res = require('node:child_process').spawnSync(csc, args, { windowsHide: true, encoding: 'utf8' });
-  if (res.status !== 0 || !fs.existsSync(TRAY_EXE)) {
+  if (res.status !== 0 || !fs.existsSync(TRAY_EXE_BUILT)) {
     log('tray build failed:', (res.stderr || res.stdout || '').trim().slice(0, 500));
-    return false;
+    return null;
   }
-  log('tray binary built:', TRAY_EXE);
-  return true;
+  log('tray binary built:', TRAY_EXE_BUILT);
+  return TRAY_EXE_BUILT;
 }
 
 function startTray() {
   stopTray();
-  if (!buildTray()) return;
+  const exe = resolveTray();
+  if (!exe) return;
   // The shipped tray binary currently registers one combination; the remaining
   // three arrive with the native-recorder work.
   const hotkey = settings.hotkeysEnabled ? settings.hotkeys.record : 'None';
   try {
-    trayProc = spawn(TRAY_EXE, [String(PORT), hotkey, path.join(WEB_DIR, 'icon.ico')], {
+    trayProc = spawn(exe, [String(PORT), hotkey, path.join(WEB_DIR, 'icon.ico')], {
       detached: false, stdio: 'ignore', windowsHide: true,
     });
     trayProc.on('exit', (code) => log('tray exited', code));
-    log('tray started, hotkey =', hotkey);
+    log('tray started:', path.basename(path.dirname(exe)) + '\\' + path.basename(exe), '| hotkey =', hotkey);
   } catch (e) {
     log('tray start failed:', e.message);
   }
@@ -726,7 +801,14 @@ async function handleApi(req, res, url) {
       providers: PROVIDERS.map(({ kind, endpoint, ...pub }) => pub),
       defaultProviderId: DEFAULT_PROVIDER_ID,
       historyCap: HISTORY_CAP,
+      version: APP_VERSION,
+      repoURL: `https://github.com/${GITHUB_REPO}`,
     });
+  }
+
+  // ---- update check (cached, fails silently)
+  if (route === '/api/update-check' && req.method === 'GET') {
+    return sendJson(res, 200, await checkForUpdate());
   }
 
   // ---- settings

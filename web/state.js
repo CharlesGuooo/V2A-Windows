@@ -47,6 +47,8 @@ export class AppState {
     this.providers = [];
     this.keys = {};
     this.historyCap = 20;
+    this.version = '0.0.0';
+    this.repoURL = '';
 
     this.recorder = null;
     this.soniox = null;
@@ -80,6 +82,8 @@ export class AppState {
     this.providers = data.providers || [];
     this.keys = data.keys || {};
     this.historyCap = data.historyCap ?? 20;
+    this.version = data.version || '0.0.0';
+    this.repoURL = data.repoURL || '';
 
     this.hotwords = Array.isArray(s.hotwords) ? s.hotwords : [];
     this.activeProviderId = this.findProvider(s.activeProvider) ? s.activeProvider : data.defaultProviderId;

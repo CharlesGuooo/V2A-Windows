@@ -274,6 +274,23 @@ export function openSettings(state) {
       state.showToast(t('设置已保存'));
     }
 
+    // Fills in only when a newer release exists; silent otherwise.
+    const updateSlot = h('div');
+    api.checkUpdate().then((info) => {
+      if (!info || !info.hasUpdate) return;
+      updateSlot.replaceChildren(section(
+        {},
+        h('button', {
+          class: 'row row--tappable row--update',
+          onClick: () => api.openExternal(info.url),
+        },
+          h('span', { class: 'row__label row__grow' }, t('有新版本 %@', info.latest)),
+          h('span', { class: 'row__value' }, t('去下载')),
+          h('span', { class: 'row__chevron' }, icon('chevronRight')),
+        ),
+      ));
+    });
+
     page.layer.append(
       navbar({
         title: t('设置'),
@@ -283,6 +300,7 @@ export function openSettings(state) {
       }),
       h('div', { class: 'scroll' },
         h('div', { class: 'form' },
+          updateSlot,
           aiSection, promptSection, sonioxSection, hotwordsSection,
           generalSection, hotkeySection, backgroundSection, aboutSection,
         ),
@@ -838,12 +856,15 @@ function openAbout(state) {
             },
             h('div', { class: 'row' },
               h('span', { class: 'row__label row__grow' }, t('版本')),
-              h('span', { class: 'row__value' }, '1.0.0 (Windows)'),
+              h('span', { class: 'row__value' }, `${state.version} (Windows)`),
             ),
             h('div', { class: 'row' },
               h('span', { class: 'row__label row__grow' }, t('数据位置')),
               h('span', { class: 'row__value' }, '%APPDATA%\\V2A'),
             ),
+            state.repoURL
+              ? linkRow(t('源码 / 反馈 →'), state.repoURL, openExternal)
+              : null,
           ),
           section(
             { header: t('隐私'), footer: t('如果换设备或重装，记得在新设备重新填一次 key。') },

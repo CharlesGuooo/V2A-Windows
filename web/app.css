@@ -366,6 +366,10 @@
   line-height: 1.5;
 }
 .row--danger .row__label { color: var(--error); }
+/* "a newer version is available" — only rendered when there actually is one */
+.row--update { background: rgba(var(--accent-rgb), 0.10); }
+.row--update .row__label { color: var(--accent); font-weight: 600; }
+.row--update .row__value { color: var(--accent); }
 
 /* text / password fields */
 .field {
