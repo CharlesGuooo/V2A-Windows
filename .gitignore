@@ -1,0 +1,16 @@
+# Build output
+dist/
+*.exe
+
+# The upstream iOS app, cloned locally as a porting reference — not part of
+# this repository. See the link in README.md instead.
+V2A_source/
+
+# Scratch / debug entry points (see README "开发" section)
+web/_dbg.*
+web/_debug.*
+
+# Runtime artefacts
+*.log
+*.tmp
+node_modules/

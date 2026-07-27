@@ -1,0 +1,299 @@
+/* ===========================================================================
+   V2A design tokens — 1:1 port of V2A/Views/AppTheme.swift +
+   V2A/Assets.xcassets/Colors/*.colorset.
+
+   Direction A: zinc neutrals + indigo accent. Every hex below is copied
+   verbatim from the iOS asset catalog, light and dark variants alike.
+   =========================================================================== */
+
+:root {
+  /* --- semantic colors: light (Assets.xcassets default appearance) --- */
+  --bg: #FAFAFA;
+  --surface: #FFFFFF;
+  --pane-tint: #F4F4F5;
+  --text-primary: #09090B;
+  --text-secondary: #71717A;
+  --text-tertiary: #A1A1AA;
+  --accent: #5E6AD2;
+  --accent-rgb: 94, 106, 210;
+  --accent-fg: #FFFFFF;
+  --border: #E4E4E7;
+  --error: #DC2626;
+  --error-rgb: 220, 38, 38;
+  --success: #16A34A;
+
+  /* --- 4pt spacing scale (enum Spacing) --- */
+  --sp-xs: 4px;
+  --sp-s: 8px;
+  --sp-m: 12px;
+  --sp-l: 16px;
+  --sp-xl: 24px;
+  --sp-xxl: 32px;
+  --sp-xxxl: 48px;
+
+  --radius: 8px;
+  --radius-lg: 10px;
+
+  /* Windows system font stack, with a CJK fallback so Chinese renders right. */
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system,
+             "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #09090B;
+  --surface: #18181B;
+  --pane-tint: #161618;
+  --text-primary: #FAFAFA;
+  --text-secondary: #A1A1AA;
+  --text-tertiary: #52525B;
+  --accent: #818CF8;
+  --accent-rgb: 129, 140, 248;
+  --accent-fg: #0B0B14;
+  --border: #27272A;
+  --error: #F87171;
+  --error-rgb: 248, 113, 113;
+  --success: #4ADE80;
+
+  color-scheme: dark;
+}
+
+/* "跟随系统" — appearance: system */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    --bg: #09090B;
+    --surface: #18181B;
+    --pane-tint: #161618;
+    --text-primary: #FAFAFA;
+    --text-secondary: #A1A1AA;
+    --text-tertiary: #52525B;
+    --accent: #818CF8;
+    --accent-rgb: 129, 140, 248;
+    --accent-fg: #0B0B14;
+    --border: #27272A;
+    --error: #F87171;
+    --error-rgb: 248, 113, 113;
+    --success: #4ADE80;
+
+    color-scheme: dark;
+  }
+}
+
+/* =========================================================== base / reset */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* Class rules that set `display` would otherwise out-specify the UA's
+   `[hidden] { display: none }`, so anything toggled via .hidden must win here. */
+[hidden] { display: none !important; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;                 /* individual screens scroll, not the shell */
+  user-select: none;                /* desktop app feel; text areas opt back in */
+}
+
+button, input, textarea, select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+button {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+button:disabled { cursor: default; }
+
+a { color: var(--accent); }
+
+textarea, input[type="text"], input[type="password"] { user-select: text; }
+
+::selection { background: rgba(var(--accent-rgb), 0.28); }
+
+/* Slim Windows-style scrollbars that follow the theme. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 3px solid transparent;
+  border-radius: 6px;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background-color: var(--text-tertiary); background-clip: content-box; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ====================================================== NoticeView (banner) */
+
+.notice {
+  font-size: 13px;                       /* .footnote */
+  color: var(--error);
+  padding: 10px var(--sp-m);             /* Spacing.s + 2 vertical */
+  background: rgba(var(--error-rgb), 0.10);
+  border-radius: var(--radius);
+}
+
+/* ErrorNoticeView — message plus an optional call-to-action. */
+.error-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-s);
+  align-items: flex-start;
+  padding: 10px var(--sp-m);
+  background: rgba(var(--error-rgb), 0.10);
+  border-radius: var(--radius);
+}
+.error-notice__message {
+  font-size: 13px;
+  color: var(--error);
+}
+.error-notice__action {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.error-notice__action:hover { text-decoration: underline; }
+
+/* ============================================================== ToastView */
+
+.toast {
+  position: fixed;
+  top: var(--sp-s);
+  left: 50%;
+  transform: translateX(-50%) translateY(-12px);
+  z-index: 100;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--bg);                       /* inverted luminance, per AppTheme */
+  background: var(--text-primary);
+  padding: 10px var(--sp-l);
+  border-radius: 999px;                   /* Capsule */
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+  max-width: calc(100% - 32px);
+  text-align: center;
+}
+.toast.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* =========================================================== button styles */
+
+/* PrimaryButtonStyle */
+.btn-primary {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-fg);
+  background: var(--accent);
+  padding: 10px var(--sp-l);
+  border-radius: var(--radius);
+  transition: opacity 0.12s, background-color 0.12s;
+}
+.btn-primary:hover:not(:disabled) { opacity: 0.92; }
+.btn-primary:active:not(:disabled) { opacity: 0.9; }
+.btn-primary.is-ok { background: var(--success); }
+.btn-primary:disabled { opacity: 0.4; }
+
+/* SecondaryButtonStyle — text only, no fill, no border. */
+.btn-secondary {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent);
+  padding: 10px var(--sp-m);
+  border-radius: var(--radius);
+  background: transparent;
+  transition: background-color 0.12s;
+}
+.btn-secondary:hover:not(:disabled) { background: rgba(var(--accent-rgb), 0.10); }
+.btn-secondary:active:not(:disabled) { background: rgba(var(--accent-rgb), 0.16); }
+.btn-secondary:disabled { opacity: 0.4; }
+
+/* CleanupButtonStyle — single accent hue at three strengths (ButtonEmphasis). */
+.btn-cleanup {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px var(--sp-s);
+  border-radius: var(--radius);
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: opacity 0.12s, background-color 0.12s;
+}
+.btn-cleanup.is-big {
+  font-size: 15px;
+  padding: var(--sp-s);
+}
+.btn-cleanup--faint {
+  color: var(--text-secondary);
+  background: rgba(var(--accent-rgb), 0.10);
+}
+.btn-cleanup--medium {
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.22);
+}
+.btn-cleanup--solid {
+  color: var(--accent-fg);
+  background: var(--accent);
+}
+.btn-cleanup.is-ok {
+  background: var(--success);
+  color: var(--accent-fg);
+}
+.btn-cleanup:hover:not(:disabled) { filter: brightness(1.06); }
+.btn-cleanup:active:not(:disabled) { opacity: 0.9; }
+.btn-cleanup:disabled { opacity: 0.4; }
+
+/* Spinner used in place of a label while a request is in flight
+   (SwiftUI ProgressView(.mini)). */
+.spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: v2a-spin 0.7s linear infinite;
+  flex: none;
+}
+@keyframes v2a-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  /* The two indeterminate-progress indicators still need to read as "busy". */
+  .spinner { animation-duration: 2s !important; animation-iteration-count: infinite !important; }
+  .record-btn.is-recording .record-btn__dot {
+    animation-duration: 2s !important;
+    animation-iteration-count: infinite !important;
+  }
+}

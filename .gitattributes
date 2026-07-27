@@ -1,0 +1,13 @@
+# V2A.vbs must stay UTF-16LE with a BOM — Windows Script Host reads .vbs in the
+# ANSI codepage otherwise and the Chinese strings break the parse. Never let git
+# re-encode it or rewrite its line endings.
+*.vbs binary
+
+# cmd.exe wants CRLF.
+*.bat text eol=crlf
+
+*.ico binary
+*.png binary
+
+# Everything else: normalise in the repo, check out native.
+* text=auto
