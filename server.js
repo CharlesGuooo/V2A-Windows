@@ -141,12 +141,15 @@ const DEFAULT_SETTINGS = {
     light: 'Ctrl+Shift+Q',
     deep: 'Ctrl+Shift+D',
     copy: 'Ctrl+Shift+X',
+    // Clearing throws away the transcript, so it gets a combination that is
+    // hard to hit by accident — and Backspace reads as "delete" anyway.
+    clear: 'Ctrl+Shift+Backspace',
   },
   hotkeysEnabled: true,
   autostart: false,       // a shortcut in the Startup folder
 };
 
-const HOTKEY_ACTIONS = ['record', 'light', 'deep', 'copy'];
+const HOTKEY_ACTIONS = ['record', 'light', 'deep', 'copy', 'clear'];
 
 function readJson(file, fallback) {
   try {

@@ -225,6 +225,16 @@ namespace V2A
             // Digits map to the Keys.D0-D9 members.
             if (keyName.Length == 1 && keyName[0] >= '0' && keyName[0] <= '9') keyName = "D" + keyName;
 
+            // The settings UI writes the spelling users recognise; translate the
+            // few that differ from the System.Windows.Forms.Keys member names.
+            switch (keyName.ToLowerInvariant())
+            {
+                case "backspace": keyName = "Back"; break;
+                case "esc": keyName = "Escape"; break;
+                case "del": keyName = "Delete"; break;
+                case "ins": keyName = "Insert"; break;
+            }
+
             try
             {
                 virtualKey = (uint)(int)Enum.Parse(typeof(Keys), keyName, true);

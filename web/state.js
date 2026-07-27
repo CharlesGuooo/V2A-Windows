@@ -39,7 +39,13 @@ export class AppState {
 
     // --- Windows additions ---
     this.historyEnabled = true;
-    this.hotkeys = { record: 'Ctrl+Shift+R', light: 'Ctrl+Shift+Q', deep: 'Ctrl+Shift+D', copy: 'Ctrl+Shift+X' };
+    this.hotkeys = {
+      record: 'Ctrl+Shift+R',
+      light: 'Ctrl+Shift+Q',
+      deep: 'Ctrl+Shift+D',
+      copy: 'Ctrl+Shift+X',
+      clear: 'Ctrl+Shift+Backspace',
+    };
     this.hotkeysEnabled = true;
     this.autostart = false;
 

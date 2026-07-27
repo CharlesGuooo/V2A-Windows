@@ -244,6 +244,7 @@ export function openSettings(state) {
       hotkeyRow('light', t('轻度整理')),
       hotkeyRow('deep', t('深度整理')),
       hotkeyRow('copy', t('复制整理结果')),
+      hotkeyRow('clear', t('清空全部')),
     );
 
     const backgroundSection = section(
@@ -360,10 +361,14 @@ function normalizeKeyName(e) {
   if (/^[a-zA-Z]$/.test(key)) return key.toUpperCase();
   if (/^[0-9]$/.test(key)) return key;
   if (/^F([1-9]|1[0-2])$/.test(key)) return key;
+  // Values are the names the tray helper parses (see TryParseHotkey in
+  // scripts/V2ATray.cs) — they are also what the user sees, so prefer the
+  // familiar spelling over the raw Win32 one ("Backspace", not "Back").
   const named = {
-    ' ': 'Space', Enter: 'Enter', Tab: 'Tab', Backspace: 'Back', Delete: 'Delete',
+    ' ': 'Space', Enter: 'Enter', Tab: 'Tab', Backspace: 'Backspace', Delete: 'Delete',
     Insert: 'Insert', Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown',
     ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right',
+    Escape: 'Escape',
     '`': 'Oemtilde', '-': 'OemMinus', '=': 'Oemplus', '\\': 'OemPipe',
     '[': 'OemOpenBrackets', ']': 'OemCloseBrackets', ';': 'OemSemicolon',
     "'": 'OemQuotes', ',': 'Oemcomma', '.': 'OemPeriod', '/': 'OemQuestion',

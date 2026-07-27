@@ -152,6 +152,7 @@ export function openOnboarding(state, onComplete) {
         ['light', t('轻度整理')],
         ['deep', t('深度整理')],
         ['copy', t('复制整理结果')],
+        ['clear', t('清空全部')],
       ];
       return h('div', { class: 'onb-step' },
         h('div', { class: 'onb-step__title onb-step__title--sub' }, t('第 4 步 · 快捷键')),
