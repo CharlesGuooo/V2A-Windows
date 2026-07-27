@@ -67,6 +67,7 @@ const cscRes = spawnSync(csc, [
   '/codepage:65001',
   `/out:${trayExe}`,
   '/reference:System.dll', '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll',
+  '/reference:System.Web.Extensions.dll',
   path.join(ROOT, 'scripts', 'V2ATray.cs'),
 ], { encoding: 'utf8', windowsHide: true });
 

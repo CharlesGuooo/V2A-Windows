@@ -28,6 +28,23 @@ export const api = {
   // Never rejects — a failed update check must not surface as an error.
   checkUpdate: () => json('/api/update-check').catch(() => ({ hasUpdate: false })),
 
+  // --- session -------------------------------------------------------
+  // Capture and cleanup both run outside the page (tray helper / server), so
+  // these are commands rather than local work. State comes back over SSE.
+
+  getSession: () => json('/api/session'),
+
+  toggleRecording: () => json('/api/session/record/toggle', { method: 'POST', body: '{}' }),
+
+  setSessionText: (patch) => json('/api/session/text', { method: 'POST', body: JSON.stringify(patch) }),
+
+  clearSession: () => json('/api/session/clear', { method: 'POST', body: '{}' }),
+
+  // Resolves with { ok, text, copied } or { ok: false, message }.
+  cleanupSession: (kind) =>
+    json('/api/session/cleanup', { method: 'POST', body: JSON.stringify({ kind }) })
+      .catch(() => ({ ok: false, message: '' })),
+
   quit: () => json('/api/tray/quit', { method: 'POST', body: '{}' }),
 
   // Streams an AI cleanup through the backend proxy (no CORS, key stays

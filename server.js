@@ -353,6 +353,63 @@ async function checkForUpdate() {
   }
 }
 
+// ---------------------------------------------------------------- session
+//
+// The authoritative transcript state lives here rather than in the page, so
+// the global hotkeys keep working with no window open and any window that
+// opens later shows what you just dictated. Deliberately in-memory: a restart
+// clears it, which matches what closing the app always meant.
+
+const session = {
+  recording: false,
+  processing: false,
+  finalText: '',
+  liveText: '',
+  processedText: '',
+};
+
+// Same rule as AppState.rawDisplay in the iOS app.
+function rawText() {
+  if (!session.liveText) return session.finalText;
+  if (!session.finalText) return session.liveText;
+  return `${session.finalText}\n\n${session.liveText}`;
+}
+
+function sessionSnapshot() {
+  return {
+    recording: session.recording,
+    processing: session.processing,
+    finalText: session.finalText,
+    liveText: session.liveText,
+    processedText: session.processedText,
+  };
+}
+
+function broadcastSession() {
+  broadcast('session', { session: sessionSnapshot() });
+}
+
+// web/prompts.js is an ES module shared with the browser; import it lazily so
+// the prompt text has exactly one definition.
+let promptDefaults = null;
+async function getPromptDefaults() {
+  if (!promptDefaults) {
+    const href = require('node:url').pathToFileURL(path.join(WEB_DIR, 'prompts.js')).href;
+    promptDefaults = (await import(href)).PromptDefaults;
+  }
+  return promptDefaults;
+}
+
+async function promptFor(kind) {
+  const p = await getPromptDefaults();
+  switch (kind) {
+    case 'deep': return p.deepCanonical;
+    case 'custom1': return settings.promptSlot1 || p.lightCanonical;
+    case 'custom2': return settings.promptSlot2 || p.lightCanonical;
+    default: return p.lightCanonical;
+  }
+}
+
 // ---------------------------------------------------------------- SSE bus
 // One SSE stream per open app window. Also our "is a window open?" signal.
 
@@ -555,6 +612,8 @@ function resolveTray() {
     '/codepage:65001',
     `/out:${TRAY_EXE_BUILT}`,
     '/reference:System.dll', '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll',
+    // JavaScriptSerializer, used for the JSON the tray exchanges with us.
+    '/reference:System.Web.Extensions.dll',
     TRAY_SRC,
   ];
   const res = require('node:child_process').spawnSync(csc, args, { windowsHide: true, encoding: 'utf8' });
@@ -570,15 +629,14 @@ function startTray() {
   stopTray();
   const exe = resolveTray();
   if (!exe) return;
-  // The shipped tray binary currently registers one combination; the remaining
-  // three arrive with the native-recorder work.
-  const hotkey = settings.hotkeysEnabled ? settings.hotkeys.record : 'None';
+  // The tray registers every hotkey it is given, so hand it the whole map.
+  const hotkeyArg = settings.hotkeysEnabled ? JSON.stringify(settings.hotkeys) : 'None';
   try {
-    trayProc = spawn(exe, [String(PORT), hotkey, path.join(WEB_DIR, 'icon.ico')], {
+    trayProc = spawn(exe, [String(PORT), hotkeyArg, path.join(WEB_DIR, 'icon.ico')], {
       detached: false, stdio: 'ignore', windowsHide: true,
     });
     trayProc.on('exit', (code) => log('tray exited', code));
-    log('tray started:', path.basename(path.dirname(exe)) + '\\' + path.basename(exe), '| hotkey =', hotkey);
+    log('tray started:', path.basename(path.dirname(exe)) + '\\' + path.basename(exe), '| hotkeys =', hotkeyArg);
   } catch (e) {
     log('tray start failed:', e.message);
   }
@@ -608,6 +666,24 @@ class HttpError extends Error {
     this.status = status;
     this.body = body;
   }
+}
+
+// Short, toast-sized version of web/errors.js classifyProvider — same branches,
+// but the tray only has room for one line.
+function describeProviderError(err, provider) {
+  const name = provider ? provider.displayName : 'AI';
+  const body = String(err.body || '').toLowerCase();
+  const quota = body.includes('insufficient') || body.includes('balance')
+    || body.includes('quota') || body.includes('resource_exhausted') || body.includes('credit');
+
+  if (err.status === 402 || quota) return `${name} 余额 / 额度不足`;
+  if (err.status === 401 || err.status === 403
+      || body.includes('api_key_invalid') || body.includes('authentication')
+      || (body.includes('invalid') && body.includes('key'))) {
+    return `${name} 的 API key 无效或已失效`;
+  }
+  if (err.status === 429) return '请求太频繁，稍等几秒再试';
+  return `整理失败（${err.status}）`;
 }
 
 // Reads an SSE-ish HTTP body line by line.
@@ -812,6 +888,134 @@ async function handleApi(req, res, url) {
   // ---- update check (cached, fails silently)
   if (route === '/api/update-check' && req.method === 'GET') {
     return sendJson(res, 200, await checkForUpdate());
+  }
+
+  // ---- session: shared transcript state -------------------------------
+
+  if (route === '/api/session' && req.method === 'GET') {
+    return sendJson(res, 200, sessionSnapshot());
+  }
+
+  // What the tray needs to open a Soniox stream.
+  if (route === '/api/session/config' && req.method === 'GET') {
+    return sendJson(res, 200, {
+      sonioxKey: keys.soniox || '',
+      languages: settings.languages,
+      hotwords: settings.hotwords,
+    });
+  }
+
+  if (route === '/api/session/recording' && req.method === 'POST') {
+    const { recording } = await readBody(req);
+    session.recording = !!recording;
+    if (session.recording) session.liveText = '';
+    broadcastSession();
+    return sendJson(res, 200, { ok: true });
+  }
+
+  // Live (interim) transcript while recording.
+  if (route === '/api/session/transcript' && req.method === 'POST') {
+    const { text } = await readBody(req);
+    session.liveText = String(text || '');
+    broadcastSession();
+    return sendJson(res, 200, { ok: true });
+  }
+
+  // End of a recording: fold the live text into the accumulated transcript.
+  if (route === '/api/session/commit' && req.method === 'POST') {
+    const { text } = await readBody(req);
+    const piece = String(text || '').trim();
+    if (piece) session.finalText = session.finalText ? `${session.finalText}\n\n${piece}` : piece;
+    session.liveText = '';
+    session.recording = false;
+    broadcastSession();
+    return sendJson(res, 200, { ok: true, chars: piece.length });
+  }
+
+  // Free-form edit from the UI window.
+  if (route === '/api/session/text' && req.method === 'POST') {
+    const body = await readBody(req);
+    if (typeof body.finalText === 'string') { session.finalText = body.finalText; session.liveText = ''; }
+    if (typeof body.processedText === 'string') session.processedText = body.processedText;
+    broadcastSession();
+    return sendJson(res, 200, { ok: true });
+  }
+
+  if (route === '/api/session/processed' && req.method === 'GET') {
+    return sendJson(res, 200, { text: session.processedText });
+  }
+
+  if (route === '/api/session/clear' && req.method === 'POST') {
+    const had = !!(session.finalText || session.liveText || session.processedText);
+    session.finalText = '';
+    session.liveText = '';
+    session.processedText = '';
+    broadcastSession();
+    return sendJson(res, 200, { ok: true, cleared: had });
+  }
+
+  // Tells the tray to start/stop capturing (the window's record button).
+  if (route === '/api/session/record/toggle' && req.method === 'POST') {
+    broadcast('toggle-record');
+    return sendJson(res, 200, { ok: true });
+  }
+
+  // Runs an AI cleanup. Answers the caller synchronously (the tray shows a
+  // toast with the outcome) while streaming tokens to any open window.
+  if (route === '/api/session/cleanup' && req.method === 'POST') {
+    const { kind } = await readBody(req);
+    const source = rawText().trim();
+
+    if (session.recording) return sendJson(res, 200, { ok: false, message: '正在录音，先停止再整理' });
+    if (session.processing) return sendJson(res, 200, { ok: false, message: '正在整理中，稍等' });
+    if (!source) return sendJson(res, 200, { ok: false, message: '没有可整理的内容' });
+
+    const provider = findProvider(settings.activeProvider);
+    const apiKey = provider ? keys[provider.account] : null;
+    if (!provider || !apiKey) {
+      return sendJson(res, 200, {
+        ok: false,
+        message: `还没有配置 ${provider ? provider.displayName : 'AI'} 的 API key`,
+      });
+    }
+
+    session.processing = true;
+    session.processedText = '';
+    broadcastSession();
+
+    try {
+      const systemPrompt = await promptFor(kind);
+      const full = await runCleanup(
+        provider, apiKey, systemPrompt, source,
+        (token) => {
+          session.processedText += token;
+          broadcast('cleanup-token', { v: token });
+        },
+        undefined,
+      );
+      session.processedText = full;
+
+      if (settings.historyEnabled) {
+        appendHistory({
+          id: require('node:crypto').randomUUID(),
+          timestamp: new Date().toISOString(),
+          raw: source,
+          cleaned: full,
+          providerId: provider.id,
+          mode: kind || 'light',
+        });
+      }
+      return sendJson(res, 200, { ok: true, text: full, copied: !!settings.autoCopy });
+    } catch (e) {
+      const message = e instanceof HttpError
+        ? describeProviderError(e, provider)
+        : `整理失败：${e.message || e}`;
+      log('cleanup failed:', message);
+      return sendJson(res, 200, { ok: false, message });
+    } finally {
+      session.processing = false;
+      broadcastSession();
+    }
   }
 
   // ---- settings

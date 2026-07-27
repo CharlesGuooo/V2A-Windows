@@ -6,6 +6,7 @@ import { buildMainScreen } from './main-screen.js';
 import { openSettings } from './settings.js';
 import { openOnboarding } from './onboarding.js';
 import { initShell, setRootLayer, renderToast, popAllPages, closeContextMenu } from './ui.js';
+import { api } from './api.js';
 
 const shell = document.getElementById('app');
 initShell(shell);
@@ -15,6 +16,9 @@ let screen = null;
 
 async function boot() {
   await state.load();
+
+  // Pick up whatever was dictated while no window was open.
+  try { state.applySession(await api.getSession()); } catch { /* server will push it */ }
 
   screen = buildMainScreen(state, {
     onOpenSettings: () => openSettings(state),
@@ -31,23 +35,7 @@ async function boot() {
   connectEvents();
 
   if (!state.onboarded) {
-    openOnboarding(state, () => {
-      state.notify();
-      maybeAutoRecord();
-    });
-  } else {
-    maybeAutoRecord();
-  }
-}
-
-// The tray/hotkey path can launch the window with ?autorecord=1 when no window
-// was open — start recording as soon as we're ready.
-function maybeAutoRecord() {
-  const params = new URLSearchParams(location.search);
-  if (params.get('autorecord') !== '1') return;
-  history.replaceState(null, '', location.pathname);
-  if (state.onboarded && state.hasSonioxKey) {
-    state.startRecording();
+    openOnboarding(state, () => state.notify());
   }
 }
 
@@ -63,10 +51,17 @@ function connectEvents() {
       let msg;
       try { msg = JSON.parse(event.data); } catch { return; }
 
-      if (msg.type === 'toggle-record') {
-        // Global hotkey pressed anywhere in Windows.
+      if (msg.type === 'session') {
+        // Authoritative transcript state — the tray may have changed it while
+        // this window wasn't even open.
+        state.applySession(msg.session);
+      } else if (msg.type === 'cleanup-token') {
+        // Streamed so the cleaned pane fills in live, same as before.
+        state.processedText += msg.v;
+        state.notify();
+      } else if (msg.type === 'toggle-record') {
+        // Meant for the tray helper; the window just closes any open menu.
         closeContextMenu();
-        state.toggleRecording();
       } else if (msg.type === 'focus') {
         window.focus();
       } else if (msg.type === 'quit') {
@@ -92,10 +87,9 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// Release the mic if the window goes away while recording.
-window.addEventListener('pagehide', () => {
-  if (state.recording || state.starting) state.stopRecording();
-});
+// Nothing to release on unload: the microphone belongs to the tray helper, so
+// closing this window leaves an in-progress recording running — which is the
+// whole point of the background mode.
 
 boot().catch((err) => {
   document.body.innerHTML =

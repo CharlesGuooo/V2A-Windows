@@ -58,6 +58,7 @@ export function buildMainScreen(state, { onOpenSettings }) {
       state.finalText = refs.rawInput.value;
       state.liveText = '';
       state.notify();
+      state.pushText({ finalText: state.finalText });
     },
   });
   refs.rawBox = h('div', { class: 'pane__box' }, refs.rawInput);
@@ -91,6 +92,7 @@ export function buildMainScreen(state, { onOpenSettings }) {
     onInput: () => {
       state.processedText = refs.processedInput.value;
       state.notify();
+      state.pushText({ processedText: state.processedText });
     },
   });
 

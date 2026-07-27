@@ -7,9 +7,7 @@
 import { api } from './api.js';
 import { t, setLang, resolveLang } from './i18n.js';
 import { PromptDefaults } from './prompts.js';
-import { MicRecorder } from './recorder.js';
-import { SonioxClient } from './soniox.js';
-import { appError, classifyProvider } from './errors.js';
+import { appError } from './errors.js';
 
 export class AppState {
   constructor() {
@@ -299,206 +297,78 @@ export class AppState {
   }
 
   // ------------------------------------------------------------ recording
+  //
+  // Capture itself lives in the native tray helper, not here — that is what
+  // lets the global hotkeys work with no window open. The window only asks the
+  // server to toggle, and learns the result from the session broadcast.
 
   toggleRecording() {
     if (this.starting || this.stopping) return;
-    if (this.recording) this.stopRecording();
-    else this.startRecording();
-  }
-
-  async startRecording() {
-    if (this.recording || this.starting || this.stopping) return;
-
-    const key = (this.keys.soniox || '').trim();
-    if (!key) {
-      this.appError = appError(t('未配置 Soniox API key。'));
+    api.toggleRecording().catch(() => {
+      this.appError = appError(t('V2A 后台没有响应'));
       this.notify();
-      return;
-    }
-
-    this.starting = true;
-    this.appError = null;
-    this.liveText = '';
-    this.receivedAnyText = false;
-    this.stoppedDueToError = false;
-    this.notify();
-
-    const recorder = new MicRecorder();
-    const granted = await recorder.requestPermission();
-    if (!granted) {
-      this.appError = appError(recorder.permissionError);
-      this.starting = false;
-      this.notify();
-      return;
-    }
-
-    recorder.onInterruption = () => {
-      if (!this.recording) return;
-      this.stoppedDueToError = true;
-      this.appError = appError(t('麦克风被其他程序占用，关掉它再试。'));
-      this.stopRecording();
-    };
-
-    const soniox = new SonioxClient({
-      apiKey: key,
-      hotwords: [...this.hotwords],
-      languageHints: [...this.selectedLanguages],
-      languageHintsStrict: this.selectedLanguages.length > 0,
-      onText: (text) => {
-        if (text) this.receivedAnyText = true;
-        this.liveText = text;
-        this.notify();
-      },
-      onFailure: (err) => {
-        this.stoppedDueToError = true;
-        this.appError = err;
-        this.stopRecording();
-      },
     });
+  }
 
-    try {
-      await soniox.start();
-    } catch (e) {
-      await recorder.stop();
-      this.appError = appError(t('Soniox 连接失败：%@', e.message || String(e)));
-      this.starting = false;
-      this.notify();
-      return;
-    }
+  startRecording() { this.toggleRecording(); }
 
-    try {
-      await recorder.start((frame) => soniox.sendAudio(frame));
-    } catch (e) {
-      await soniox.stop();
-      await recorder.stop();
-      this.appError = appError(t('麦克风失败：%@', e.message || String(e)));
-      this.starting = false;
-      this.notify();
-      return;
-    }
+  stopRecording() {
+    if (!this.recording) return;
+    this.toggleRecording();
+  }
 
-    this.recorder = recorder;
-    this.soniox = soniox;
-    this.starting = false;
-    this.recording = true;
+  // Applies a session snapshot pushed by the server.
+  applySession(s) {
+    if (!s) return;
+    this.recording = !!s.recording;
+    this.processing = !!s.processing;
+    this.finalText = s.finalText || '';
+    this.liveText = s.liveText || '';
+    this.processedText = s.processedText || '';
     this.notify();
   }
 
-  async stopRecording() {
-    if (this.stopping) return;
-    if (!this.recording && !this.recorder && !this.soniox) return;
-
-    this.stopping = true;
-    this.recording = false;
-    this.notify();
-
-    if (this.recorder) {
-      await this.recorder.stop();
-      this.recorder = null;
-    }
-    if (this.soniox) {
-      await this.soniox.stop();
-      this.soniox = null;
-    }
-
-    const session = this.liveText.trim();
-    if (session) {
-      this.finalText = this.finalText ? `${this.finalText}\n\n${session}` : session;
-    }
-    this.liveText = '';
-    this.stopping = false;
-
-    // A whole session with nothing heard (and no error that stopped it) is
-    // almost always a mic problem — say so rather than sitting silent.
-    if (!this.stoppedDueToError && !this.receivedAnyText && !session) {
-      this.appError = appError(t('没听到声音，检查麦克风或说话音量。'));
-    }
-    this.stoppedDueToError = false;
-    this.notify();
+  // Text typed into either pane goes back to the server, which is the single
+  // source of truth the hotkeys operate on.
+  pushText(patch) {
+    clearTimeout(this._textPushTimer);
+    this._textPushTimer = setTimeout(() => {
+      api.setSessionText(patch).catch(() => { /* best effort */ });
+    }, 300);
   }
+
 
   // ------------------------------------------------------------ AI cleanup
 
+  // Cleanup runs on the server so the hotkeys and the window share one
+  // implementation, one result and one history entry. Tokens stream back over
+  // the session broadcast; this call resolves when the whole thing is done.
   async processWithAI(kind = 'light') {
-    if (this.isBusy) return;
-    const provider = this.findProvider(this.activeProviderId);
-    if (!provider) return;
-    if (!(this.keys[provider.account] || '').trim()) return;
+    if (this.isBusy || this.processing) return;
 
-    const source = this.rawDisplay;
-    if (!source || this.processing) return;
-
-    const activePrompt = this.prompt(kind);
-    const providerId = this.activeProviderId;
-
-    this.processing = true;
-    this.processedText = '';
     this.appError = null;
     this.notify();
 
-    this.cleanupAbort?.abort();
-    const controller = new AbortController();
-    this.cleanupAbort = controller;
+    const res = await api.cleanupSession(kind);
 
-    try {
-      const cleaned = await api.cleanup({
-        providerId,
-        systemPrompt: activePrompt,
-        transcript: source,
-        signal: controller.signal,
-        onToken: (token) => {
-          if (controller.signal.aborted) return;
-          this.processedText += token;
-          this.notify();
-        },
-      });
-
-      if (controller.signal.aborted) return;
-
-      // Replace with the trimmed final to clear any trailing whitespace.
-      if (this.processedText !== cleaned) this.processedText = cleaned;
-
-      this.recordSessionIfEnabled(source, cleaned, providerId, kind);
-
-      if (this.autoCopy && cleaned) {
-        await this.writeClipboard(cleaned);
+    if (!res || res.ok) {
+      // Success: the session broadcast already carries the cleaned text.
+      if (res && res.ok && this.autoCopy && res.text) {
+        await this.writeClipboard(res.text);
         this.showToast(t('已自动复制到剪贴板'));
       }
-    } catch (e) {
-      if (controller.signal.aborted || e?.name === 'AbortError') return;
-      this.appError = classifyProvider(
-        e && e.kind ? e : { kind: 'network', message: e?.message || String(e) },
-        provider,
-      );
-    } finally {
-      if (this.cleanupAbort === controller) this.cleanupAbort = null;
-      this.processing = false;
-      this.notify();
+      return;
     }
-  }
-
-  recordSessionIfEnabled(raw, cleaned, providerId, mode) {
-    if (!this.historyEnabled) return;
-    api.appendHistory({
-      id: crypto.randomUUID(),
-      timestamp: new Date().toISOString(),
-      raw,
-      cleaned,
-      providerId,
-      mode,
-    }).catch(() => { /* best effort */ });
+    this.appError = appError(res.message || t('AI 整理失败：%@', ''));
+    this.notify();
   }
 
   clearAll() {
     if (this.isBusy) return;
-    this.cleanupAbort?.abort();
-    this.cleanupAbort = null;
-    this.processing = false;
-    this.finalText = '';
-    this.liveText = '';
-    this.processedText = '';
     this.appError = null;
     this.notify();
+    // The session broadcast will echo the cleared state back.
+    api.clearSession().catch(() => { /* best effort */ });
   }
 
   // ---------------------------------------------------------------- copy
