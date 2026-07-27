@@ -119,7 +119,9 @@ begin
   Result := True;
   if IsV2ARunning() then
   begin
-    if MsgBox(ExpandConstant('{cm:AppRunning}'), mbConfirmation, MB_OKCANCEL) = IDCANCEL then
+    // Suppressed (silent install) -> IDOK, i.e. carry on.
+    if SuppressibleMsgBox(ExpandConstant('{cm:AppRunning}'), mbConfirmation,
+                          MB_OKCANCEL, IDOK) = IDCANCEL then
       Result := False;
   end;
 end;
@@ -133,9 +135,13 @@ begin
     DataDir := ExpandConstant('{userappdata}\V2A');
     if DirExists(DataDir) then
     begin
-      // Default is No — losing your API keys to a stray click would be rude.
-      if MsgBox(FmtMessage(ExpandConstant('{cm:RemoveDataPrompt}'), [DataDir]),
-                mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+      // MUST be SuppressibleMsgBox, not MsgBox: under /SUPPRESSMSGBOXES a plain
+      // MsgBox defaults to Yes, which would silently destroy the user's API
+      // keys and history during an unattended uninstall. The final argument is
+      // the answer returned when message boxes are suppressed — keep it IDNO so
+      // the destructive branch can only ever be taken by an explicit click.
+      if SuppressibleMsgBox(FmtMessage(ExpandConstant('{cm:RemoveDataPrompt}'), [DataDir]),
+                            mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES then
         DelTree(DataDir, True, True, True);
     end;
   end;
