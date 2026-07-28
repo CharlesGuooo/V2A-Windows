@@ -46,6 +46,7 @@ export class AppState {
     };
     this.hotkeysEnabled = true;
     this.autostart = false;
+    this.silenceTimeoutSec = 60;
 
     // --- internals ---
     this.providers = [];
@@ -101,6 +102,7 @@ export class AppState {
     this.hotkeys = { ...this.hotkeys, ...(s.hotkeys || {}) };
     this.hotkeysEnabled = s.hotkeysEnabled !== false;
     this.autostart = !!s.autostart;
+    this.silenceTimeoutSec = Number.isFinite(s.silenceTimeoutSec) ? s.silenceTimeoutSec : 60;
 
     // Existing users (already have keys) skip onboarding — same rule as iOS.
     if (s.onboarded) {
@@ -211,6 +213,12 @@ export class AppState {
   setAutostart(enabled) {
     this.autostart = !!enabled;
     this.persist({ autostart: this.autostart });
+    this.notify();
+  }
+
+  setSilenceTimeout(seconds) {
+    this.silenceTimeoutSec = Number(seconds) || 0;
+    this.persist({ silenceTimeoutSec: this.silenceTimeoutSec });
     this.notify();
   }
 

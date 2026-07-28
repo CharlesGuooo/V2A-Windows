@@ -214,6 +214,18 @@ export function openSettings(state) {
         value: state.historyEnabled,
         onChange: (v) => state.setHistoryEnabled(v),
       }),
+      selectRow({
+        label: t('多久没说话就自动停止'),
+        value: String(state.silenceTimeoutSec),
+        options: [
+          { value: '30', label: t('30 秒') },
+          { value: '60', label: t('1 分钟') },
+          { value: '120', label: t('2 分钟') },
+          { value: '300', label: t('5 分钟') },
+          { value: '0', label: t('不自动停止') },
+        ],
+        onChange: (v) => state.setSilenceTimeout(v),
+      }),
       historyRow,
     );
 

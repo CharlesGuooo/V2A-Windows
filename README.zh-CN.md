@@ -34,14 +34,14 @@ V2A 把这一段补上：**转录之后再让 AI 按你定的规则整理一遍*
 ### 方式一：安装包（推荐）
 
 到 [**Releases**](https://github.com/CharlesGuooo/V2A-Windows/releases/latest) 下载
-`V2A-Setup-1.0.0.exe`（约 23 MB），双击走向导即可。**不需要管理员权限，不会弹 UAC**
+`V2A-Setup-1.0.1.exe`（约 23 MB），双击走向导即可。**不需要管理员权限，不会弹 UAC**
 —— 装在 `%LOCALAPPDATA%\Programs\V2A`。安装包里已经带了 Node 运行时，**不用另外装任何东西**。
 
 卸载走「添加或删除程序」，会问你要不要一并删掉 API key 和历史记录（默认保留）。
 
 ### 方式二：便携版
 
-下载 `V2A-1.0.0-portable.zip`（约 32 MB），解压到任意位置，双击里面的 `V2A.vbs`。
+下载 `V2A-1.0.1-portable.zip`（约 32 MB），解压到任意位置，双击里面的 `V2A.vbs`。
 不写注册表、不建卸载项，删掉文件夹就等于卸载。
 
 ### 方式三：从源码运行
@@ -77,7 +77,7 @@ token，一个免费开源小工具暂时不打算买。
 
 - 每个 Release 都附 `SHA256SUMS.txt`，可以校验下载的文件没被掉包：
   ```powershell
-  Get-FileHash .\V2A-Setup-1.0.0.exe -Algorithm SHA256
+  Get-FileHash .\V2A-Setup-1.0.1.exe -Algorithm SHA256
   ```
 - 托盘程序的**完整源码随包分发**（安装目录里的 `scripts\V2ATray.cs`），
   你可以自己读、自己用 `csc.exe` 重新编译一份

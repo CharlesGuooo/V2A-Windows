@@ -149,6 +149,9 @@ const DEFAULT_SETTINGS = {
   },
   hotkeysEnabled: true,
   autostart: false,       // a shortcut in the Startup folder
+  // Stop a recording nobody is talking into, so a forgotten session can't
+  // quietly run up a Soniox bill. 0 disables it.
+  silenceTimeoutSec: 60,
 };
 
 const HOTKEY_ACTIONS = ['record', 'light', 'deep', 'copy', 'clear'];
@@ -645,10 +648,25 @@ function startTray() {
   // The tray registers every hotkey it is given, so hand it the whole map.
   const hotkeyArg = settings.hotkeysEnabled ? JSON.stringify(settings.hotkeys) : 'None';
   try {
-    trayProc = spawn(exe, [String(PORT), hotkeyArg, path.join(WEB_DIR, 'icon.ico'), resolveUiLang()], {
+    trayProc = spawn(exe, [
+      String(PORT), hotkeyArg, path.join(WEB_DIR, 'icon.ico'),
+      resolveUiLang(), String(settings.silenceTimeoutSec ?? 60),
+    ], {
       detached: false, stdio: 'ignore', windowsHide: true,
     });
-    trayProc.on('exit', (code) => log('tray exited', code));
+    trayProc.on('exit', (code) => {
+      log('tray exited', code);
+      // The tray owns the microphone. If it died mid-recording it never got to
+      // report the stop, and the UI would be frozen showing "recording" with
+      // every control disabled. Recover here rather than making the user
+      // restart the app.
+      if (session.recording) {
+        log('tray died while recording — clearing the recording flag');
+        session.recording = false;
+        session.liveText = '';
+        broadcastSession();
+      }
+    });
     log('tray started:', path.basename(path.dirname(exe)) + '\\' + path.basename(exe),
         '| lang =', resolveUiLang(), '| hotkeys =', hotkeyArg);
   } catch (e) {
@@ -1036,11 +1054,17 @@ async function handleApi(req, res, url) {
   if (route === '/api/settings' && req.method === 'POST') {
     const patch = await readBody(req);
     // The tray reads its hotkeys and its language once, at launch.
-    const before = JSON.stringify([settings.hotkeys, settings.hotkeysEnabled, settings.uiLanguage]);
+    // The tray reads all of these once, at launch.
+    const before = JSON.stringify([
+      settings.hotkeys, settings.hotkeysEnabled, settings.uiLanguage, settings.silenceTimeoutSec,
+    ]);
     const autostartChanged =
       patch.autostart !== undefined && patch.autostart !== settings.autostart;
     saveSettings(patch);
-    if (JSON.stringify([settings.hotkeys, settings.hotkeysEnabled, settings.uiLanguage]) !== before) startTray();
+    const after = JSON.stringify([
+      settings.hotkeys, settings.hotkeysEnabled, settings.uiLanguage, settings.silenceTimeoutSec,
+    ]);
+    if (after !== before) startTray();
     if (autostartChanged) await applyAutostart(settings.autostart);
     return sendJson(res, 200, { ok: true, settings });
   }

@@ -81,7 +81,7 @@ and the install directory to your antivirus exclusions.
 
 - Every release ships `SHA256SUMS.txt` so you can verify what you downloaded:
   ```powershell
-  Get-FileHash .\V2A-Setup-1.0.0.exe -Algorithm SHA256
+  Get-FileHash .\V2A-Setup-1.0.1.exe -Algorithm SHA256
   ```
 - **The tray helper's full source ships inside the package** (`scripts\V2ATray.cs`).
   Read it, and rebuild it yourself with `csc.exe` if you want.

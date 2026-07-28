@@ -15,7 +15,7 @@
 // Compiled by server.js (source runs) or scripts/build-release.mjs (releases)
 // with the .NET Framework compiler that ships with Windows.
 //
-// Usage: V2ATray.exe <port> <hotkeysJson|None> <iconPath> <lang: en|zh>
+// Usage: V2ATray.exe <port> <hotkeysJson|None> <iconPath> <lang: en|zh> <silenceSec>
 
 using System;
 using System.Collections.Generic;
@@ -304,13 +304,16 @@ namespace V2A
             public IntPtr reserved;
         }
 
-        private delegate void WaveInProc(IntPtr hWaveIn, uint msg, IntPtr inst, ref WaveHdr hdr, IntPtr p2);
+        // The header is passed as a raw pointer, never as `ref WaveHdr`: the
+        // struct has to live in unmanaged memory (see Start) and marshalling it
+        // by reference would hand winmm the address of a managed copy.
+        private delegate void WaveInProc(IntPtr hWaveIn, uint msg, IntPtr inst, IntPtr hdrPtr, IntPtr p2);
 
         [DllImport("winmm.dll")] private static extern int waveInGetNumDevs();
         [DllImport("winmm.dll")] private static extern int waveInOpen(out IntPtr h, int dev, WaveFormatEx fmt, WaveInProc cb, IntPtr inst, int flags);
-        [DllImport("winmm.dll")] private static extern int waveInPrepareHeader(IntPtr h, ref WaveHdr hdr, int size);
-        [DllImport("winmm.dll")] private static extern int waveInUnprepareHeader(IntPtr h, ref WaveHdr hdr, int size);
-        [DllImport("winmm.dll")] private static extern int waveInAddBuffer(IntPtr h, ref WaveHdr hdr, int size);
+        [DllImport("winmm.dll")] private static extern int waveInPrepareHeader(IntPtr h, IntPtr hdr, int size);
+        [DllImport("winmm.dll")] private static extern int waveInUnprepareHeader(IntPtr h, IntPtr hdr, int size);
+        [DllImport("winmm.dll")] private static extern int waveInAddBuffer(IntPtr h, IntPtr hdr, int size);
         [DllImport("winmm.dll")] private static extern int waveInStart(IntPtr h);
         [DllImport("winmm.dll")] private static extern int waveInStop(IntPtr h);
         [DllImport("winmm.dll")] private static extern int waveInReset(IntPtr h);
@@ -318,10 +321,11 @@ namespace V2A
 
         private IntPtr handle;
         private WaveInProc callback;          // must stay rooted or the GC collects it
-        private WaveHdr[] headers;
-        private IntPtr[] buffers;
+        private IntPtr[] headerPtrs;          // WAVEHDRs, in unmanaged memory
+        private IntPtr[] buffers;             // the PCM buffers they point at
         private volatile bool running;
         private readonly int hdrSize = Marshal.SizeOf(typeof(WaveHdr));
+        private readonly object teardown = new object();
 
         // frame: raw 16-bit LE PCM. rms: 0..1 loudness of that frame.
         public Action<byte[], double> OnFrame;
@@ -337,63 +341,107 @@ namespace V2A
             if (waveInOpen(out handle, WAVE_MAPPER, new WaveFormatEx(), callback, IntPtr.Zero, CALLBACK_FUNCTION) != 0)
                 return false;
 
-            headers = new WaveHdr[BUFFER_COUNT];
+            headerPtrs = new IntPtr[BUFFER_COUNT];
             buffers = new IntPtr[BUFFER_COUNT];
             running = true;
+
             for (int i = 0; i < BUFFER_COUNT; i++)
             {
                 buffers[i] = Marshal.AllocHGlobal(FRAME_BYTES);
-                headers[i] = new WaveHdr { lpData = buffers[i], dwBufferLength = FRAME_BYTES };
-                waveInPrepareHeader(handle, ref headers[i], hdrSize);
-                waveInAddBuffer(handle, ref headers[i], hdrSize);
+                // Both the buffer and the header itself are unmanaged, so the GC
+                // can never move them out from under the driver.
+                headerPtrs[i] = Marshal.AllocHGlobal(hdrSize);
+                var hdr = new WaveHdr { lpData = buffers[i], dwBufferLength = FRAME_BYTES };
+                Marshal.StructureToPtr(hdr, headerPtrs[i], false);
+                waveInPrepareHeader(handle, headerPtrs[i], hdrSize);
+                waveInAddBuffer(handle, headerPtrs[i], hdrSize);
             }
             waveInStart(handle);
             return true;
         }
 
-        private void OnWaveIn(IntPtr h, uint msg, IntPtr inst, ref WaveHdr hdr, IntPtr p2)
+        // Runs on a driver thread. An exception escaping here kills the whole
+        // process, so the body is wrapped unconditionally.
+        private void OnWaveIn(IntPtr h, uint msg, IntPtr inst, IntPtr hdrPtr, IntPtr p2)
         {
-            if (msg != MM_WIM_DATA || !running) return;
-
-            int n = (int)hdr.dwBytesRecorded;
-            if (n > 0)
+            try
             {
-                var pcm = new byte[n];
-                Marshal.Copy(hdr.lpData, pcm, 0, n);
+                if (msg != MM_WIM_DATA || !running || hdrPtr == IntPtr.Zero) return;
 
-                double sum = 0;
-                for (int i = 0; i + 1 < n; i += 2)
+                var hdr = (WaveHdr)Marshal.PtrToStructure(hdrPtr, typeof(WaveHdr));
+                int n = (int)hdr.dwBytesRecorded;
+
+                if (n > 0 && hdr.lpData != IntPtr.Zero && n <= FRAME_BYTES)
                 {
-                    short s = (short)(pcm[i] | (pcm[i + 1] << 8));
-                    double v = s / 32768.0;
-                    sum += v * v;
+                    var pcm = new byte[n];
+                    Marshal.Copy(hdr.lpData, pcm, 0, n);
+
+                    double sum = 0;
+                    for (int i = 0; i + 1 < n; i += 2)
+                    {
+                        short s = (short)(pcm[i] | (pcm[i + 1] << 8));
+                        double v = s / 32768.0;
+                        sum += v * v;
+                    }
+                    double rms = Math.Sqrt(sum / (n / 2.0));
+
+                    var sink = OnFrame;
+                    if (sink != null) sink(pcm, rms);
                 }
-                double rms = Math.Sqrt(sum / (n / 2.0));
 
-                var sink = OnFrame;
-                if (sink != null) { try { sink(pcm, rms); } catch { } }
+                // Recycle — but only while still running, and only under the
+                // same lock Stop() uses, so we can't hand back a freed header.
+                lock (teardown)
+                {
+                    if (running) waveInAddBuffer(h, hdrPtr, hdrSize);
+                }
             }
-
-            if (running) waveInAddBuffer(h, ref hdr, hdrSize);
+            catch
+            {
+                // A dropped frame is survivable; a dead process is not.
+            }
         }
 
         public void Stop()
         {
-            if (!running) return;
-            running = false;
+            IntPtr h;
+            lock (teardown)
+            {
+                if (!running) return;
+                running = false;       // from here the callback stops re-queueing
+                h = handle;
+                handle = IntPtr.Zero;
+            }
+            if (h == IntPtr.Zero) return;
+
             try
             {
-                waveInStop(handle);
-                waveInReset(handle);
-                for (int i = 0; i < BUFFER_COUNT; i++)
-                {
-                    try { waveInUnprepareHeader(handle, ref headers[i], hdrSize); } catch { }
-                    if (buffers[i] != IntPtr.Zero) { Marshal.FreeHGlobal(buffers[i]); buffers[i] = IntPtr.Zero; }
-                }
-                waveInClose(handle);
+                waveInStop(h);
+                waveInReset(h);        // marks every queued buffer done
             }
             catch { }
-            handle = IntPtr.Zero;
+
+            // Let any callback already inside the driver finish before the
+            // memory it is reading disappears.
+            Thread.Sleep(120);
+
+            lock (teardown)
+            {
+                for (int i = 0; i < BUFFER_COUNT; i++)
+                {
+                    if (headerPtrs[i] == IntPtr.Zero) continue;
+                    try { waveInUnprepareHeader(h, headerPtrs[i], hdrSize); } catch { }
+                }
+                try { waveInClose(h); } catch { }
+
+                // Only now, with the device closed, is it safe to free.
+                for (int i = 0; i < BUFFER_COUNT; i++)
+                {
+                    if (headerPtrs[i] != IntPtr.Zero) { Marshal.FreeHGlobal(headerPtrs[i]); headerPtrs[i] = IntPtr.Zero; }
+                    if (buffers[i] != IntPtr.Zero) { Marshal.FreeHGlobal(buffers[i]); buffers[i] = IntPtr.Zero; }
+                }
+            }
+            callback = null;
         }
 
         public void Dispose() { Stop(); }
@@ -486,11 +534,13 @@ namespace V2A
             try
             {
                 if (ws.State == WebSocketState.Open)
-                    ws.SendAsync(new ArraySegment<byte>(new byte[0]), WebSocketMessageType.Text, true, CancellationToken.None).Wait(2000);
+                    ws.SendAsync(new ArraySegment<byte>(new byte[0]), WebSocketMessageType.Text, true, CancellationToken.None).Wait(1000);
             }
             catch { }
-            Thread.Sleep(600);
-            try { ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None).Wait(2000); } catch { }
+            // Long enough for the server to flush its final tokens, short enough
+            // that stopping still feels immediate.
+            Thread.Sleep(400);
+            try { ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None).Wait(800); } catch { }
             try { cts.Cancel(); } catch { }
             socket = null;
         }
@@ -760,6 +810,11 @@ namespace V2A
         private static volatile bool busy;       // a start/stop is in flight
         private static DateTime lastPush = DateTime.MinValue;
 
+        // Auto-stop: a recording nobody is talking into just burns Soniox credit.
+        private static int silenceTimeoutSec = 60;      // 0 disables it
+        private static DateTime lastSpeechAt = DateTime.MinValue;
+        private static string lastTranscript = "";
+
         [STAThread]
         private static int Main(string[] args)
         {
@@ -768,6 +823,7 @@ namespace V2A
             string iconPath = args.Length > 2 ? args[2] : null;
             // server.js has already resolved the "system" setting for us.
             L.Init(args.Length > 3 ? args[3] : "en");
+            if (args.Length > 4) silenceTimeoutSec = ParseInt(args[4], 60);
 
             // .NET Framework does not always negotiate TLS 1.2 by default, and
             // Soniox requires it.
@@ -775,6 +831,14 @@ namespace V2A
             ServicePointManager.DefaultConnectionLimit = 16;
 
             api = new ServerApi(port);
+
+            // Last-resort net. If anything still manages to kill this process,
+            // tell the server the recording is over first — otherwise the UI is
+            // stuck showing "recording" with every button disabled, and the only
+            // way out is restarting the app.
+            AppDomain.CurrentDomain.UnhandledException += delegate { EmergencyStop(); };
+            Application.ThreadException += delegate { EmergencyStop(); };
+            Application.ApplicationExit += delegate { EmergencyStop(); };
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
@@ -809,6 +873,22 @@ namespace V2A
         {
             int v;
             return int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out v) ? v : fallback;
+        }
+
+        // Releases the microphone and clears the server's recording flag. Safe to
+        // call from a dying process and safe to call twice.
+        private static void EmergencyStop()
+        {
+            if (!recording) return;
+            recording = false;
+            try { if (mic != null) mic.Stop(); } catch { }
+            try { if (soniox != null) soniox.Stop(); } catch { }
+            try
+            {
+                api.Request("POST", "/api/session/recording",
+                    new Dictionary<string, object> { { "recording", false } });
+            }
+            catch { }
         }
 
         private static void OnUi(Action a)
@@ -931,10 +1011,35 @@ namespace V2A
 
         // -------------------------------------------------------- recording
 
+        // Starting can take a while (the Soniox handshake allows up to 12 s) and
+        // stopping takes about a second. A press during that window used to be
+        // dropped on the floor, so the user pressed "stop", nothing happened, and
+        // the recording just kept going. Remember the press instead and apply it
+        // as soon as the current operation finishes.
+        private static readonly object toggleLock = new object();
+        private static bool pendingToggle;
+
         private static void ToggleRecording()
         {
-            if (busy) return;
-            if (recording) StopRecording(false); else StartRecording();
+            lock (toggleLock)
+            {
+                if (busy) { pendingToggle = true; return; }
+                if (recording) StopRecording(false); else StartRecording();
+            }
+        }
+
+        // Called at the end of every start/stop. Runs a press that arrived while
+        // we were busy.
+        private static void FinishOperation()
+        {
+            bool again;
+            lock (toggleLock)
+            {
+                busy = false;
+                again = pendingToggle;
+                pendingToggle = false;
+            }
+            if (again) ToggleRecording();
         }
 
         private static void StartRecording()
@@ -981,10 +1086,12 @@ namespace V2A
                     }
 
                     recording = true;
+                    lastTranscript = "";
+                    lastSpeechAt = DateTime.UtcNow;
                     api.Request("POST", "/api/session/recording", new Dictionary<string, object> { { "recording", true } });
                     OnUi(delegate { hud.Begin(); });
                 }
-                finally { busy = false; }
+                finally { FinishOperation(); }
             });
         }
 
@@ -994,10 +1101,22 @@ namespace V2A
             recording = false;
             busy = true;
 
+            // Take the bar down straight away. Tearing the Soniox socket down
+            // gracefully takes a second or two, and leaving the "recording"
+            // indicator up during that reads as "my keypress did nothing".
+            OnUi(delegate { hud.End(); });
+
             ThreadPool.QueueUserWorkItem(delegate
             {
                 try
                 {
+                    // Unlock the window's controls immediately too — the commit
+                    // below would otherwise only clear the flag once the socket
+                    // has finished closing.
+                    api.Request("POST", "/api/session/recording",
+                        new Dictionary<string, object> { { "recording", false } });
+
+                    // Release the microphone first, so nothing further is captured.
                     if (mic != null) { mic.Stop(); mic.Dispose(); mic = null; }
 
                     string text = "";
@@ -1007,8 +1126,6 @@ namespace V2A
                         text = soniox.Transcript ?? "";
                         soniox = null;
                     }
-
-                    OnUi(delegate { hud.End(); });
 
                     var res = api.Request("POST", "/api/session/commit",
                         new Dictionary<string, object> { { "text", text } });
@@ -1020,7 +1137,7 @@ namespace V2A
                         Toast(L.T("Stopped - " + text.Trim().Length + " chars",
                                   "已停止 · " + text.Trim().Length + " 字"), Theme.Success);
                 }
-                finally { busy = false; }
+                finally { FinishOperation(); }
             });
         }
 
@@ -1028,6 +1145,14 @@ namespace V2A
         // so a long session doesn't hammer the loopback server.
         private static void PushTranscript(string text)
         {
+            // Any growth in the transcript means Soniox actually heard speech —
+            // that, not raw microphone level, is what resets the silence timer.
+            if (text != null && text.Length > lastTranscript.Length)
+            {
+                lastTranscript = text;
+                lastSpeechAt = DateTime.UtcNow;
+            }
+
             DateTime now = DateTime.UtcNow;
             if ((now - lastPush).TotalMilliseconds < 150) return;
             lastPush = now;
@@ -1159,15 +1284,30 @@ namespace V2A
             catch { }
         }
 
-        // If server.js goes away, don't leave an orphan icon in the tray.
+        // Two jobs on one timer: don't leave an orphan tray icon if server.js
+        // goes away, and don't keep an unattended recording running forever.
         private static void StartWatchdog()
         {
             var timer = new System.Windows.Forms.Timer();
-            timer.Interval = 5000;
+            timer.Interval = 2000;
             timer.Tick += delegate
             {
+                if (recording && silenceTimeoutSec > 0
+                    && (DateTime.UtcNow - lastSpeechAt).TotalSeconds >= silenceTimeoutSec)
+                {
+                    int mins = silenceTimeoutSec / 60;
+                    string howLong = mins >= 1
+                        ? L.T(mins + (mins == 1 ? " minute" : " minutes"), mins + " 分钟")
+                        : L.T(silenceTimeoutSec + " seconds", silenceTimeoutSec + " 秒");
+                    Toast(L.T("No speech for " + howLong + " - recording stopped",
+                              "超过" + howLong + "没说话，已自动停止录音"), Theme.Accent);
+                    StopRecording(true);
+                    return;
+                }
+
                 if (!api.Alive())
                 {
+                    EmergencyStop();
                     notify.Visible = false;
                     Application.Exit();
                 }
