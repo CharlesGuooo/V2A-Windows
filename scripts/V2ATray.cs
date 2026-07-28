@@ -34,6 +34,45 @@ using System.Windows.Forms;
 
 namespace V2A
 {
+    // ====================================================================== log
+    // Writes to %APPDATA%\V2A\tray.log. Without this the tray is a black box:
+    // when the overlay didn't appear there was no way to tell whether the call
+    // was skipped, threw, or drew off-screen.
+    internal static class Log
+    {
+        private static readonly object gate = new object();
+        private static string path;
+
+        public static void Init()
+        {
+            try
+            {
+                string dir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "V2A");
+                Directory.CreateDirectory(dir);
+                path = Path.Combine(dir, "tray.log");
+                // Keep it from growing without bound.
+                if (File.Exists(path) && new FileInfo(path).Length > 512 * 1024) File.Delete(path);
+            }
+            catch { path = null; }
+        }
+
+        public static void W(string message)
+        {
+            if (path == null) return;
+            try
+            {
+                lock (gate)
+                {
+                    File.AppendAllText(path,
+                        DateTime.Now.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture) + "  " + message + "\r\n",
+                        Encoding.UTF8);
+                }
+            }
+            catch { }
+        }
+    }
+
     // ================================================================== strings
     // The tray shows text on screen (menu, toasts, the recording bar) so it has
     // to follow the same language as the HTML UI. server.js resolves the
@@ -97,10 +136,14 @@ namespace V2A
             TopMost = true;
         }
 
-        // Bottom-right, above the taskbar.
+        // Bottom-right of whichever monitor the user is actually working on —
+        // pinning this to the primary screen would hide the recording indicator
+        // from anyone whose main workspace is a second display.
         protected void PlaceBottomRight(int margin)
         {
-            Rectangle wa = Screen.PrimaryScreen.WorkingArea;
+            Rectangle wa;
+            try { wa = Screen.FromPoint(Cursor.Position).WorkingArea; }
+            catch { wa = Screen.PrimaryScreen.WorkingArea; }
             Location = new Point(wa.Right - Width - margin, wa.Bottom - Height - margin);
         }
 
@@ -145,19 +188,23 @@ namespace V2A
 
         public void Begin()
         {
+            Log.W("HUD.Begin");
             startedAt = DateTime.UtcNow;
             level = 0;
             blinkOn = true;
             PlaceBottomRight(16);
             RoundCorners(this, 10);
             Show();
+            BringToFront();
             ticker.Start();
+            Log.W("HUD shown at " + Location + " size " + Size + " visible=" + Visible);
         }
 
         public void End()
         {
             ticker.Stop();
             Hide();
+            Log.W("HUD hidden");
         }
 
         public void ReportLevel(double rms)
@@ -830,6 +877,10 @@ namespace V2A
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
             ServicePointManager.DefaultConnectionLimit = 16;
 
+            Log.Init();
+            Log.W("=== tray starting: port=" + port + " lang=" + (args.Length > 3 ? args[3] : "?")
+                  + " silence=" + silenceTimeoutSec + "s ===");
+
             api = new ServerApi(port);
 
             // Last-resort net. If anything still manages to kill this process,
@@ -846,9 +897,14 @@ namespace V2A
             marshal = new Control();
             marshal.CreateControl();
             IntPtr forceHandle = marshal.Handle;   // realise the handle on this thread
+            Log.W("UI marshal handle created: " + (marshal.IsHandleCreated ? "yes" : "NO"));
 
             hud = new RecordingHud();
             toast = new ToastWindow();
+            // Realise both overlay handles now, on the UI thread, rather than
+            // lazily at Show() time from a background call.
+            IntPtr h1 = hud.Handle, h2 = toast.Handle;
+            Log.W("overlays created (hud=" + h1.ToInt64() + " toast=" + h2.ToInt64() + ")");
 
             BuildTray(iconPath, hotkeysJson);
             RegisterHotkeys(hotkeysJson);
@@ -893,13 +949,25 @@ namespace V2A
 
         private static void OnUi(Action a)
         {
-            if (marshal == null || !marshal.IsHandleCreated) return;
+            if (marshal == null || !marshal.IsHandleCreated)
+            {
+                Log.W("OnUi SKIPPED - no UI handle");
+                return;
+            }
             try
             {
-                if (marshal.InvokeRequired) marshal.BeginInvoke(a);
+                if (marshal.InvokeRequired)
+                {
+                    // Wrapped so an exception on the UI thread is logged rather
+                    // than silently swallowing whatever we were trying to draw.
+                    marshal.BeginInvoke((Action)delegate
+                    {
+                        try { a(); } catch (Exception e) { Log.W("UI action threw: " + e); }
+                    });
+                }
                 else a();
             }
-            catch { }
+            catch (Exception e) { Log.W("OnUi threw: " + e); }
         }
 
         private static void Toast(string text, Color color)
@@ -992,12 +1060,14 @@ namespace V2A
                 if (!hotkeys.Register(combo, handler)) failed.Add(combo);
             };
 
+            Log.W("registering hotkeys: " + string.Join(" ", new List<string>(map.Values).ToArray()));
             bind("record", ToggleRecording);
             bind("light", delegate { RunCleanup("light"); });
             bind("deep", delegate { RunCleanup("deep"); });
             bind("copy", CopyResult);
             bind("clear", ClearAll);
 
+            Log.W("hotkeys registered, failures=" + failed.Count);
             if (failed.Count > 0)
             {
                 notify.ShowBalloonTip(5000, "V2A",
@@ -1023,7 +1093,8 @@ namespace V2A
         {
             lock (toggleLock)
             {
-                if (busy) { pendingToggle = true; return; }
+                if (busy) { pendingToggle = true; Log.W("toggle queued (busy)"); return; }
+                Log.W("toggle -> " + (recording ? "stop" : "start"));
                 if (recording) StopRecording(false); else StartRecording();
             }
         }
@@ -1077,8 +1148,14 @@ namespace V2A
                         OnUi(delegate { hud.ReportLevel(rms); });
                     };
 
+                    // Raise the indicator *before* the microphone opens, so there
+                    // is never a moment where audio is being captured with nothing
+                    // on screen to say so.
+                    OnUi(delegate { hud.Begin(); });
+
                     if (!mic.Start())
                     {
+                        OnUi(delegate { hud.End(); });
                         Toast(L.T("Could not open the microphone - another app may be using it", "麦克风打不开，可能被其他程序占用"), Theme.Error);
                         soniox.Stop();
                         soniox = null;
@@ -1086,10 +1163,10 @@ namespace V2A
                     }
 
                     recording = true;
+                    Log.W("recording STARTED");
                     lastTranscript = "";
                     lastSpeechAt = DateTime.UtcNow;
                     api.Request("POST", "/api/session/recording", new Dictionary<string, object> { { "recording", true } });
-                    OnUi(delegate { hud.Begin(); });
                 }
                 finally { FinishOperation(); }
             });
@@ -1098,6 +1175,7 @@ namespace V2A
         private static void StopRecording(bool silent)
         {
             if (!recording) return;
+            Log.W("stopping (silent=" + silent + ")");
             recording = false;
             busy = true;
 
