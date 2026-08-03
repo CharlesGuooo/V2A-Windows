@@ -10,10 +10,8 @@ const TOTAL_STEPS = 5;
 
 const PROVIDER_HINT = {
   deepseek: 'Deepseek 注册就送免费额度，对中文友好，推荐先用这家试试。',
-  claude: 'Claude 质量最稳，但需要先在 Anthropic 充值才能用。',
-  gemini: 'Google Gemini 每天有免费配额，量不大的话不用付钱。',
-  openai: 'OpenAI 知名度最高，但要先充值才能用 API。',
-  groq: 'Groq 速度飞快、免费额度大。适合刚开始试。',
+  gptoss: 'GPT-OSS 跑在 Cerebras 上，速度飞快。用 OpenRouter 的 key。',
+  glm: 'GLM 4.7 跑在 Cerebras 上，又快又稳。用 OpenRouter 的 key（和 GPT-OSS 共用）。',
 };
 
 export function openOnboarding(state, onComplete) {
@@ -51,7 +49,7 @@ export function openOnboarding(state, onComplete) {
           ...[
             '接下来要填两个 key：',
             '· Soniox（把声音变文字）',
-            '· 一家 AI 服务商（整理文字，5 家任选其一）',
+            '· 一家 AI 服务商（整理文字，Deepseek 或 OpenRouter）',
             '两个 key 都从对应官网注册账号免费拿。',
           ].map((line) => h('div', { class: 'onb-step__bullet' }, t(line))),
         ),
@@ -106,7 +104,8 @@ export function openOnboarding(state, onComplete) {
 
       return h('div', { class: 'onb-step' },
         h('div', { class: 'onb-step__title onb-step__title--sub' }, t('第 2 步 · 选一家 AI')),
-        h('div', { class: 'onb-step__body' }, t('用谁来帮你整理文字。5 家任选一家，以后随时可以切换。')),
+        h('div', { class: 'onb-step__body' },
+          t('用谁来帮你整理文字。默认 Deepseek；想更快就选 OpenRouter 的 GPT-OSS / GLM。随时可切换。')),
         picker,
         keyField,
         current ? h('button', {

@@ -1,6 +1,6 @@
 {
   "name": "v2a-windows",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "V2A — Voice to Agent, Windows build. Speech to Soniox to AI cleanup to clipboard.",
   "private": true,
   "license": "MIT",

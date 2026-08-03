@@ -34,7 +34,7 @@ V2A 把这一段补上：**转录之后再让 AI 按你定的规则整理一遍*
 ### 方式一：安装包（推荐）
 
 到 [**Releases**](https://github.com/CharlesGuooo/V2A-Windows/releases/latest) 下载
-`V2A-Setup-1.0.2.exe`（约 23 MB），双击走向导即可。**不需要管理员权限，不会弹 UAC**
+`V2A-Setup-1.0.3.exe`（约 23 MB），双击走向导即可。**不需要管理员权限，不会弹 UAC**
 —— 装在 `%LOCALAPPDATA%\Programs\V2A`。安装包里已经带了 Node 运行时，**不用另外装任何东西**。
 
 卸载走「添加或删除程序」，会问你要不要一并删掉 API key 和历史记录（默认保留）。
@@ -77,7 +77,7 @@ token，一个免费开源小工具暂时不打算买。
 
 - 每个 Release 都附 `SHA256SUMS.txt`，可以校验下载的文件没被掉包：
   ```powershell
-  Get-FileHash .\V2A-Setup-1.0.2.exe -Algorithm SHA256
+  Get-FileHash .\V2A-Setup-1.0.3.exe -Algorithm SHA256
   ```
 - 托盘程序的**完整源码随包分发**（安装目录里的 `scripts\V2ATray.cs`），
   你可以自己读、自己用 `csc.exe` 重新编译一份
@@ -96,11 +96,11 @@ token，一个免费开源小工具暂时不打算买。
 
 | Provider | 说明 |
 |---|---|
-| **Deepseek**（默认） | 注册送免费额度，中文友好，推荐先用这家 |
-| **Groq** | 免费额度大、速度飞快 |
-| **Gemini** | 每天有免费配额，量不大不用付钱 |
-| **Claude** | 质量最稳，但要先充值 |
-| **OpenAI** | 知名度最高，也要先充值 |
+| **Deepseek**（默认） | 直连。注册送免费额度，中文友好，推荐先用这家 |
+| **GPT-OSS 120B** | 走 OpenRouter，锁定 Cerebras —— 速度飞快 |
+| **GLM 4.7** | 走 OpenRouter，锁定 Cerebras —— 又快又稳 |
+
+GPT-OSS 和 GLM **共用同一个 OpenRouter key**，只需填一次。
 
 key 存在哪：**用 Windows 数据保护（DPAPI）加密后存在本机**，只有你这个 Windows
 账户能解开。应用内随时可以换 provider，每家的 key 独立保存。

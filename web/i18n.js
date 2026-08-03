@@ -23,7 +23,6 @@ const EN = {
   '转录的文字会出现在这里。停止后可编辑。': 'Transcribed text appears here. Editable after you stop.',
   '已复制 ✓': 'Copied ✓',
   '复制原文': 'Copy raw',
-  '整理中…': 'Cleaning up…',
   'AI 整理后': 'Cleaned',
   'AI 整理后的文本会出现在这里。': 'Cleaned text appears here.',
   '未配置 AI provider API key — AI 整理不可用。': 'No AI provider API key — cleanup unavailable.',
@@ -34,8 +33,27 @@ const EN = {
   '取消': 'Cancel',
   '保存': 'Save',
   'AI 整理（必需）': 'AI Cleanup (required)',
-  '选一家 provider 给你的语音转录做后期清理。每家 key 独立存储，可随时切换。':
-    'Pick a provider to clean up your transcripts. Each key is stored separately; switch any time.',
+  '选谁来给转录做整理。Deepseek 直连；GPT-OSS / GLM 走 OpenRouter（Cerebras，更快，两者共用一个 key）。':
+    'Pick who cleans up your transcript. Deepseek is direct; GPT-OSS / GLM go through OpenRouter (Cerebras — faster, and they share one key).',
+  'Deepseek · 帮你整理文字': 'Deepseek · Cleans up text',
+  'OpenRouter · GPT-OSS / GLM（更快，走 Cerebras）': 'OpenRouter · GPT-OSS / GLM (faster, via Cerebras)',
+  '打开 Deepseek 控制台 →': 'Open Deepseek console →',
+  '打开 OpenRouter 拿 key →': 'Open OpenRouter to get a key →',
+  '新账号有免费额度，先用着不要钱。默认就是这家。':
+    'New accounts get free credit. This is the default provider.',
+  'GPT-OSS 和 GLM 4.7 共用同一个 OpenRouter key，跑在 Cerebras 上，速度非常快。':
+    'GPT-OSS and GLM 4.7 share one OpenRouter key and run on Cerebras — very fast.',
+  '打开 openrouter.ai 注册账号（可用 Google / GitHub 登录）':
+    'Open openrouter.ai and sign up (Google / GitHub works)',
+  '在 openrouter.ai/credits 充一点额度（用量很省）':
+    'Add a little credit at openrouter.ai/credits (usage is cheap)',
+  '打开 openrouter.ai/keys → Create Key': 'Open openrouter.ai/keys → Create Key',
+  '复制 sk-or- 开头的 key，回到 V2A 设置里选 GPT-OSS 或 GLM 粘进去':
+    'Copy the sk-or- key, then in V2A settings pick GPT-OSS or GLM and paste it',
+  'GPT-OSS 跑在 Cerebras 上，速度飞快。用 OpenRouter 的 key。':
+    'GPT-OSS runs on Cerebras — blazing fast. Uses an OpenRouter key.',
+  'GLM 4.7 跑在 Cerebras 上，又快又稳。用 OpenRouter 的 key（和 GPT-OSS 共用）。':
+    'GLM 4.7 runs on Cerebras — fast and solid. Uses the OpenRouter key (shared with GPT-OSS).',
   '去 %@ 网站拿 key →': 'Get a %@ API key →',
   '整理风格': 'Cleanup Style',
   '告诉 AI 怎么整理': 'Tell AI how to clean up',
@@ -68,9 +86,7 @@ const EN = {
   '完成': 'Done',
   '未配置 Soniox key，去设置 → Soniox 那栏填一下。': 'Soniox key not set. Open Settings → Soniox to add it.',
   'Soniox · 把语音转成文字（必需）': 'Soniox · Voice to Text (required)',
-  '%@ · 帮你整理文字': '%@ · Cleans up text',
   '打开 Soniox 控制台 →': 'Open Soniox Console →',
-  '打开 %@ 控制台 →': 'Open %@ Console →',
   '打开 console.soniox.com，用邮箱注册一个账号': 'Open console.soniox.com and sign up with email',
   '登录后左边菜单找到「API Keys」': "Sign in, then find 'API Keys' in the left menu",
   '点「Create API Key」生成一个新 key': "Click 'Create API Key' to generate a new key",
@@ -79,29 +95,6 @@ const EN = {
   '登录后点右上角头像 → API Keys': 'Sign in, then click your avatar (top-right) → API Keys',
   '点「Create new API key」起个名字，生成 key': "Click 'Create new API key', give it a name, generate the key",
   '复制 sk- 开头的字符串，回到 V2A 设置粘进 AI 整理那栏': 'Copy the sk- key and paste it into V2A → Settings → AI Cleanup',
-  '打开 console.anthropic.com 注册账号': 'Open console.anthropic.com and sign up',
-  '充值至少 5 美元（Anthropic 要求先充值才能用 API）': 'Add at least $5 of credit (Anthropic requires prepayment before API use)',
-  '左边菜单 API Keys → 点「Create Key」': "Left menu → API Keys → click 'Create Key'",
-  '复制 sk-ant- 开头的 key，回到 V2A 设置粘进去': 'Copy the sk-ant- key and paste it into V2A → Settings',
-  '打开 aistudio.google.com，用 Google 账号登录': 'Open aistudio.google.com and sign in with Google',
-  '左下角点「Get API key」': "Click 'Get API key' at the bottom-left",
-  '点「Create API key」，选一个 Google Cloud 项目（没有就让它新建）':
-    "Click 'Create API key' and pick a Google Cloud project (let it create one if you don't have any)",
-  '复制 AIza 开头的 key，回到 V2A 设置粘进去': 'Copy the AIza key and paste it into V2A → Settings',
-  '打开 platform.openai.com 注册账号': 'Open platform.openai.com and sign up',
-  '必须先充值（最少 5 美元）才能用 API': 'Add credit (at least $5) before you can use the API',
-  '右上角设置 → API keys → Create new secret key': "Top-right Settings → API keys → 'Create new secret key'",
-  '复制 sk- 开头的 key（关掉就看不到了，记得马上粘到 V2A）':
-    'Copy the sk- key (it disappears once you close the dialog — paste into V2A right away)',
-  '打开 console.groq.com，可以直接用 Google 或 GitHub 登录': 'Open console.groq.com — sign in with Google or GitHub',
-  '左边菜单点「API Keys」': 'Left menu → API Keys',
-  '点「Create API Key」起个名字': "Click 'Create API Key' and give it a name",
-  '复制 gsk_ 开头的 key，回到 V2A 设置粘进去': 'Copy the gsk_ key and paste it into V2A → Settings',
-  '新账号有免费额度，先用着不要钱。': 'New accounts get free credit — costs nothing to start.',
-  '每天有免费配额，量不大的话不用付钱。': 'Daily free quota — usually no payment needed for casual use.',
-  '免费额度大、速度飞快。适合刚开始试。': 'Generous free tier and very fast. Great to try first.',
-  '质量最稳，但要先充钱才能用。': 'Most consistent quality, but requires prepaid credit.',
-  '知名度最高，但价格不便宜，要先充值。': 'Most well-known but pricier — requires prepaid credit.',
   '关于': 'About',
   '版本': 'Version',
   '说一段话 → 实时转成文字 → AI 整理通顺 → 复制给 ChatGPT / Claude / 任何 Agent。打字慢的时候用。':
@@ -125,7 +118,8 @@ const EN = {
     'Speak a sentence — it transcribes automatically, AI cleans it up, copy to ChatGPT or any agent in one click. Great when typing is too slow.',
   '接下来要填两个 key：': "Next, you'll add two keys:",
   '· Soniox（把声音变文字）': '· Soniox (voice → text)',
-  '· 一家 AI 服务商（整理文字，5 家任选其一）': '· One AI provider (text cleanup, pick any of 5)',
+  '· 一家 AI 服务商（整理文字，Deepseek 或 OpenRouter）':
+    '· One AI provider (text cleanup — Deepseek or OpenRouter)',
   '两个 key 都从对应官网注册账号免费拿。': "Both keys are free to grab — sign up on each provider's website.",
   '第 1 步 · Soniox key': 'Step 1 · Soniox key',
   'Soniox 负责把你说的话实时转成文字。': 'Soniox transcribes your voice in real time.',
@@ -134,19 +128,12 @@ const EN = {
   '拿 key 的步骤：注册账号 → 登录 → 左侧 API Keys → Create API Key → 复制。':
     'Steps: sign up → sign in → left menu API Keys → Create API Key → copy.',
   '第 2 步 · 选一家 AI': 'Step 2 · Pick an AI',
-  '用谁来帮你整理文字。5 家任选一家，以后随时可以切换。':
-    'Choose who cleans up your text. Pick one of 5; you can switch any time later.',
-  'AI 服务商': 'AI Provider',
+  '用谁来帮你整理文字。默认 Deepseek；想更快就选 OpenRouter 的 GPT-OSS / GLM。随时可切换。':
+    "Who cleans up your text. Default is Deepseek; for more speed pick OpenRouter's GPT-OSS / GLM. Switch any time.",
   '把 %@ 的 API key 粘进来': 'Paste your %@ API key here',
   '还没有 key？打开 %@ 注册 →': "Don't have one? Sign up at %@ →",
   'Deepseek 注册就送免费额度，对中文友好，推荐先用这家试试。':
-    'Deepseek gives free credit on signup. Great for Chinese. Recommended to start with.',
-  'Claude 质量最稳，但需要先在 Anthropic 充值才能用。':
-    'Claude has the most consistent quality, but Anthropic requires prepaid credit.',
-  'Google Gemini 每天有免费配额，量不大的话不用付钱。':
-    'Google Gemini has a daily free quota — likely free for casual use.',
-  'OpenAI 知名度最高，但要先充值才能用 API。': 'OpenAI is the most well-known, but requires prepaid credit.',
-  'Groq 速度飞快、免费额度大。适合刚开始试。': 'Groq is very fast with a generous free tier. Great to start with.',
+    'Deepseek gives free credit on signup and is great for Chinese. Recommended to start with.',
   '转录历史': 'Transcript history',
   '清空': 'Clear',
   '清空全部历史？': 'Clear all history?',
@@ -158,8 +145,6 @@ const EN = {
   '最近 %lld 条': 'last %lld',
   '整理完自动复制': 'Auto-copy after cleanup',
   '已自动复制到剪贴板': 'Copied to clipboard',
-  '「自动复制」打开后，AI 整理一完成就把结果写到剪贴板，省一步操作。历史保存在本机。':
-    "When 'Auto-copy' is on, the cleaned text is written to your clipboard the moment AI cleanup finishes. History stays on this device.",
   '外观': 'Appearance',
   '轻度整理': 'Quick',
   '深度整理': 'Deep',
@@ -187,10 +172,6 @@ const EN = {
   'Soniox 余额 / 额度不足，无法转录。': 'Soniox is out of balance / quota — transcription unavailable.',
   'Soniox 连接出错：%@': 'Soniox connection error: %@',
   'Soniox 连接断开，请重试。': 'Soniox disconnected. Please retry.',
-  '未配置 Soniox API key。': 'Soniox API key not set.',
-  'Soniox 连接失败：%@': 'Soniox connection failed: %@',
-  '麦克风失败：%@': 'Microphone error: %@',
-  '没听到声音，检查麦克风或说话音量。': "Didn't catch any audio — check your mic or speak louder.",
   '录音中': 'Recording',
   '开始录音': 'Start recording',
   '启动失败：%@': 'Failed to start: %@',
@@ -244,10 +225,7 @@ const EN = {
   '源码 / 反馈 →': 'Source / feedback →',
   '有新版本 %@': 'Version %@ available',
   '去下载': 'Download',
-  '录音快捷键': 'Recording hotkey',
   '全局快捷键（任何窗口下都能用）': 'Global hotkey — works from any window',
-  '按下快捷键就开始/停止录音，不用先切回 V2A。留空或关掉就不注册。':
-    'Press the hotkey to start/stop recording without switching to V2A first. Turn it off to unregister.',
   '启用全局快捷键': 'Enable global hotkey',
   '快捷键已保存，立即生效。': 'Hotkey saved and active.',
   '关闭窗口后 V2A 会继续留在系统托盘，按快捷键随时能录音。右键托盘图标可以彻底退出。':
@@ -257,8 +235,6 @@ const EN = {
   '已保存文件': 'File saved',
   '设置已保存': 'Settings saved',
   '按下想用的组合键…': 'Press the key combination…',
-  '点这里录制快捷键': 'Click here to record a hotkey',
-  '界面语言已切换。': 'App language switched.',
 };
 
 let currentLang = 'zh';

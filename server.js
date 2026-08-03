@@ -12,7 +12,7 @@
 //   - own the app lifecycle: browser app-window, tray helper, global hotkey
 //
 // Ports of: KeychainStore.swift, HistoryStore.swift, HotwordsStore.swift,
-// OpenAICompatibleClient.swift, AnthropicClient.swift, GeminiClient.swift.
+// OpenAICompatibleClient.swift.
 
 const http = require('node:http');
 const fs = require('node:fs');
@@ -62,6 +62,19 @@ process.on('unhandledRejection', (e) => log('unhandledRejection', e && e.stack |
 // ---------------------------------------------------------------- providers
 // Mirrors V2A/Services/Providers/*.swift — same ids, models, and URLs.
 
+// Two OpenRouter-hosted models, both pinned to the Cerebras provider for
+// maximum speed. They share one OpenRouter API key so the user only pastes it
+// once. OpenRouter is OpenAI-compatible; Cerebras is forced via the `provider`
+// routing block in the request body.
+const OPENROUTER = {
+  endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+  account: 'provider.openrouter',
+  apiKeyHelpURL: 'https://openrouter.ai/keys',
+  billingURL: 'https://openrouter.ai/settings/credits',
+  // Cerebras only, no fallback to slower hosts.
+  routing: { provider: { only: ['cerebras'], allow_fallbacks: false } },
+};
+
 const PROVIDERS = [
   {
     id: 'deepseek',
@@ -74,50 +87,33 @@ const PROVIDERS = [
     endpoint: 'https://api.deepseek.com/chat/completions',
   },
   {
-    id: 'claude',
-    displayName: 'Claude Haiku 4.5',
-    defaultModel: 'claude-haiku-4-5-20251001',
-    apiKeyHelpURL: 'https://console.anthropic.com/settings/keys',
-    billingURL: 'https://console.anthropic.com/settings/billing',
-    account: 'provider.claude',
-    kind: 'anthropic',
-    endpoint: 'https://api.anthropic.com/v1/messages',
-  },
-  {
-    id: 'gemini',
-    displayName: 'Gemini 2.5 Flash',
-    defaultModel: 'gemini-2.5-flash',
-    apiKeyHelpURL: 'https://aistudio.google.com/apikey',
-    billingURL: 'https://console.cloud.google.com/billing',
-    account: 'provider.gemini',
-    kind: 'gemini',
-    endpoint: 'https://generativelanguage.googleapis.com/v1beta/models',
-  },
-  {
-    id: 'openai',
-    displayName: 'OpenAI GPT-4o mini',
-    defaultModel: 'gpt-4o-mini',
-    apiKeyHelpURL: 'https://platform.openai.com/api-keys',
-    billingURL: 'https://platform.openai.com/settings/organization/billing',
-    account: 'provider.openai',
+    id: 'gptoss',
+    displayName: 'GPT-OSS 120B (Cerebras)',
+    defaultModel: 'openai/gpt-oss-120b',
+    apiKeyHelpURL: OPENROUTER.apiKeyHelpURL,
+    billingURL: OPENROUTER.billingURL,
+    account: OPENROUTER.account,
     kind: 'openai',
-    endpoint: 'https://api.openai.com/v1/chat/completions',
+    endpoint: OPENROUTER.endpoint,
+    extraBody: OPENROUTER.routing,
   },
   {
-    id: 'groq',
-    displayName: 'Groq Llama 3.1 8B',
-    defaultModel: 'llama-3.1-8b-instant',
-    apiKeyHelpURL: 'https://console.groq.com/keys',
-    billingURL: 'https://console.groq.com/settings/billing',
-    account: 'provider.groq',
+    id: 'glm',
+    displayName: 'GLM 4.7 (Cerebras)',
+    defaultModel: 'z-ai/glm-4.7',
+    apiKeyHelpURL: OPENROUTER.apiKeyHelpURL,
+    billingURL: OPENROUTER.billingURL,
+    account: OPENROUTER.account,
     kind: 'openai',
-    endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+    endpoint: OPENROUTER.endpoint,
+    extraBody: OPENROUTER.routing,
   },
 ];
 
 const DEFAULT_PROVIDER_ID = 'deepseek';
 const findProvider = (id) => PROVIDERS.find((p) => p.id === id) || null;
-const ALL_ACCOUNTS = ['soniox', ...PROVIDERS.map((p) => p.account)];
+// GPT-OSS and GLM share one account, so de-duplicate.
+const ALL_ACCOUNTS = [...new Set(['soniox', ...PROVIDERS.map((p) => p.account)])];
 
 // ---------------------------------------------------------------- settings
 
@@ -187,6 +183,12 @@ function migrateSettings(s) {
   }
   delete next.hotkey;
   delete next.hotkeyEnabled;
+  // Claude / Gemini / OpenAI / Groq were replaced by the OpenRouter pair. Anyone
+  // who had one of them selected would otherwise be stuck on a provider that no
+  // longer exists, with the cleanup buttons permanently disabled.
+  if (!PROVIDERS.some((p) => p.id === next.activeProvider)) {
+    next.activeProvider = DEFAULT_PROVIDER_ID;
+  }
   return next;
 }
 
@@ -758,6 +760,9 @@ async function cleanupOpenAI(p, apiKey, systemPrompt, transcript, emit, signal) 
       ],
       stream: true,
       temperature: 0.2,
+      // Lets a provider add fields of its own — OpenRouter's `provider`
+      // routing block, for instance.
+      ...(p.extraBody || {}),
     }),
   });
   if (!res.ok) throw new HttpError(res.status, await readErrorBody(res));
@@ -775,74 +780,9 @@ async function cleanupOpenAI(p, apiKey, systemPrompt, transcript, emit, signal) 
   return acc.trim();
 }
 
-async function cleanupAnthropic(p, apiKey, systemPrompt, transcript, emit, signal) {
-  const res = await fetch(p.endpoint, {
-    method: 'POST',
-    signal,
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: p.defaultModel,
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: transcript }],
-      stream: true,
-      temperature: 0.2,
-    }),
-  });
-  if (!res.ok) throw new HttpError(res.status, await readErrorBody(res));
-
-  let acc = '';
-  for await (const line of readLines(res)) {
-    if (!line.startsWith('data: ')) continue;
-    let obj;
-    try { obj = JSON.parse(line.slice(6)); } catch { continue; }
-    if (obj.type === 'content_block_delta' && obj.delta?.type === 'text_delta') {
-      const t = obj.delta.text || '';
-      if (t) { acc += t; emit(t); }
-    } else if (obj.type === 'message_stop') {
-      break;
-    }
-  }
-  return acc.trim();
-}
-
-async function cleanupGemini(p, apiKey, systemPrompt, transcript, emit, signal) {
-  const url = `${p.endpoint}/${p.defaultModel}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`;
-  const res = await fetch(url, {
-    method: 'POST',
-    signal,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ role: 'user', parts: [{ text: transcript }] }],
-      generationConfig: { temperature: 0.2 },
-    }),
-  });
-  if (!res.ok) throw new HttpError(res.status, await readErrorBody(res));
-
-  let acc = '';
-  for await (const line of readLines(res)) {
-    if (!line.startsWith('data: ')) continue;
-    let obj;
-    try { obj = JSON.parse(line.slice(6)); } catch { continue; }
-    let out = '';
-    for (const cand of obj.candidates || []) {
-      for (const part of cand.content?.parts || []) {
-        if (typeof part.text === 'string') out += part.text;
-      }
-    }
-    if (out) { acc += out; emit(out); }
-  }
-  return acc.trim();
-}
-
+// Every provider is OpenAI-compatible now; the Anthropic and Gemini clients
+// went away with those providers.
 function runCleanup(p, apiKey, systemPrompt, transcript, emit, signal) {
-  if (p.kind === 'anthropic') return cleanupAnthropic(p, apiKey, systemPrompt, transcript, emit, signal);
-  if (p.kind === 'gemini') return cleanupGemini(p, apiKey, systemPrompt, transcript, emit, signal);
   return cleanupOpenAI(p, apiKey, systemPrompt, transcript, emit, signal);
 }
 

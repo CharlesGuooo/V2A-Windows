@@ -81,7 +81,7 @@ and the install directory to your antivirus exclusions.
 
 - Every release ships `SHA256SUMS.txt` so you can verify what you downloaded:
   ```powershell
-  Get-FileHash .\V2A-Setup-1.0.2.exe -Algorithm SHA256
+  Get-FileHash .\V2A-Setup-1.0.3.exe -Algorithm SHA256
   ```
 - **The tray helper's full source ships inside the package** (`scripts\V2ATray.cs`).
   Read it, and rebuild it yourself with `csc.exe` if you want.
@@ -100,11 +100,11 @@ First launch walks you through five steps. Both keys are free to obtain:
 
 | Provider | Notes |
 |---|---|
-| **Deepseek** (default) | Free credit on signup, strong with Chinese — good first choice |
-| **Groq** | Generous free tier, very fast |
-| **Gemini** | Daily free quota; casual use usually costs nothing |
-| **Claude** | Most consistent quality, but needs prepaid credit |
-| **OpenAI** | Best known, also needs prepaid credit |
+| **Deepseek** (default) | Direct. Free credit on signup, strong with Chinese — good first choice |
+| **GPT-OSS 120B** | Via OpenRouter, pinned to Cerebras — blazing fast |
+| **GLM 4.7** | Via OpenRouter, pinned to Cerebras — fast and solid |
+
+GPT-OSS and GLM **share one OpenRouter key**, so you only paste it once.
 
 Keys are encrypted at rest with **Windows Data Protection (DPAPI)** — only your Windows
 account can decrypt them. Switch providers any time; each key is stored separately.

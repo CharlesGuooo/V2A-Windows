@@ -52,7 +52,7 @@ export function openSettings(state) {
     const aiSection = section(
       {
         header: t('AI 整理（必需）'),
-        footer: t('选一家 provider 给你的语音转录做后期清理。每家 key 独立存储，可随时切换。'),
+        footer: t('选谁来给转录做整理。Deepseek 直连；GPT-OSS / GLM 走 OpenRouter（Cerebras，更快，两者共用一个 key）。'),
       },
       selectRow({
         label: 'Provider',
@@ -774,46 +774,21 @@ const SONIOX_STEPS = [
   '复制出来的那串字符，回到 V2A 设置粘到 Soniox 那栏',
 ];
 
-const PROVIDER_STEPS = {
-  deepseek: [
-    '打开 platform.deepseek.com 注册账号（手机号或邮箱都行）',
-    '登录后点右上角头像 → API Keys',
-    '点「Create new API key」起个名字，生成 key',
-    '复制 sk- 开头的字符串，回到 V2A 设置粘进 AI 整理那栏',
-  ],
-  claude: [
-    '打开 console.anthropic.com 注册账号',
-    '充值至少 5 美元（Anthropic 要求先充值才能用 API）',
-    '左边菜单 API Keys → 点「Create Key」',
-    '复制 sk-ant- 开头的 key，回到 V2A 设置粘进去',
-  ],
-  gemini: [
-    '打开 aistudio.google.com，用 Google 账号登录',
-    '左下角点「Get API key」',
-    '点「Create API key」，选一个 Google Cloud 项目（没有就让它新建）',
-    '复制 AIza 开头的 key，回到 V2A 设置粘进去',
-  ],
-  openai: [
-    '打开 platform.openai.com 注册账号',
-    '必须先充值（最少 5 美元）才能用 API',
-    '右上角设置 → API keys → Create new secret key',
-    '复制 sk- 开头的 key（关掉就看不到了，记得马上粘到 V2A）',
-  ],
-  groq: [
-    '打开 console.groq.com，可以直接用 Google 或 GitHub 登录',
-    '左边菜单点「API Keys」',
-    '点「Create API Key」起个名字',
-    '复制 gsk_ 开头的 key，回到 V2A 设置粘进去',
-  ],
-};
+const DEEPSEEK_STEPS = [
+  '打开 platform.deepseek.com 注册账号（手机号或邮箱都行）',
+  '登录后点右上角头像 → API Keys',
+  '点「Create new API key」起个名字，生成 key',
+  '复制 sk- 开头的字符串，回到 V2A 设置粘进 AI 整理那栏',
+];
 
-const PROVIDER_FOOTNOTE = {
-  deepseek: '新账号有免费额度，先用着不要钱。',
-  gemini: '每天有免费配额，量不大的话不用付钱。',
-  groq: '免费额度大、速度飞快。适合刚开始试。',
-  claude: '质量最稳，但要先充钱才能用。',
-  openai: '知名度最高，但价格不便宜，要先充值。',
-};
+// GPT-OSS and GLM share one OpenRouter key, so they get one combined section
+// rather than two identical ones.
+const OPENROUTER_STEPS = [
+  '打开 openrouter.ai 注册账号（可用 Google / GitHub 登录）',
+  '在 openrouter.ai/credits 充一点额度（用量很省）',
+  '打开 openrouter.ai/keys → Create Key',
+  '复制 sk-or- 开头的 key，回到 V2A 设置里选 GPT-OSS 或 GLM 粘进去',
+];
 
 function stepsView(steps) {
   return h('div', { class: 'row row--stack' },
@@ -836,14 +811,22 @@ function openFAQ(state) {
             stepsView(SONIOX_STEPS),
             linkRow(t('打开 Soniox 控制台 →'), SONIOX_CONSOLE, openExternal),
           ),
-          ...state.providers.map((p) => section(
+          section(
             {
-              header: t('%@ · 帮你整理文字', p.displayName),
-              footer: PROVIDER_FOOTNOTE[p.id] ? t(PROVIDER_FOOTNOTE[p.id]) : null,
+              header: t('Deepseek · 帮你整理文字'),
+              footer: t('新账号有免费额度，先用着不要钱。默认就是这家。'),
             },
-            stepsView(PROVIDER_STEPS[p.id] || []),
-            linkRow(t('打开 %@ 控制台 →', p.displayName), p.apiKeyHelpURL, openExternal),
-          )),
+            stepsView(DEEPSEEK_STEPS),
+            linkRow(t('打开 Deepseek 控制台 →'), 'https://platform.deepseek.com/api_keys', openExternal),
+          ),
+          section(
+            {
+              header: t('OpenRouter · GPT-OSS / GLM（更快，走 Cerebras）'),
+              footer: t('GPT-OSS 和 GLM 4.7 共用同一个 OpenRouter key，跑在 Cerebras 上，速度非常快。'),
+            },
+            stepsView(OPENROUTER_STEPS),
+            linkRow(t('打开 OpenRouter 拿 key →'), 'https://openrouter.ai/keys', openExternal),
+          ),
         ),
       ),
     );
